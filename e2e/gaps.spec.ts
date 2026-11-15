@@ -32,10 +32,20 @@ async function signOut(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
+/** Tests in this file share one page; sign out a session left by the previous test before logging in. */
+async function freshLogin(page: Page, email: string) {
+  // client-side nav (no reload / re-boot): /app shows the shell when signed in, otherwise redirects to /login
+  await nav(page, '/app');
+  const menu = page.getByRole('button', { name: 'Account menu' });
+  await expect(menu.or(page.getByLabel('Work email'))).toBeVisible({ timeout: 60_000 });
+  if (await menu.isVisible()) await signOut(page);
+  await login(page, email);
+}
+
 test('attendance correction: employee requests → manager approves; team leave calendar; dark mode', async () => {
   test.setTimeout(300_000);
   const page = shared;
-  await login(page, 'employee@nimbus.test');
+  await freshLogin(page, 'employee@nimbus.test');
 
   // employee: request a correction for yesterday
   await nav(page, '/app/attendance?tab=corrections');
@@ -83,7 +93,7 @@ test('attendance correction: employee requests → manager approves; team leave 
 test('recruiting: bulk tag + bulk stage move, offer templates, reports PDF, careers education & reference number', async () => {
   test.setTimeout(300_000);
   const page = shared;
-  await login(page, 'hr@nimbus.test');
+  await freshLogin(page, 'hr@nimbus.test');
 
   // bulk tag on the candidates table
   await nav(page, '/app/recruitment/candidates');
@@ -144,7 +154,9 @@ test('recruiting: bulk tag + bulk stage move, offer templates, reports PDF, care
   // careers: education fields + reference number on success
   await signOut(page);
   await nav(page, '/careers/nimbus');
-  await page.getByRole('link', { name: /View details|Apply/ }).first().click();
+  // job cards are links named by their content (title, location, salary), so pick the first card by its URL
+  await page.locator('a[href^="/careers/nimbus/jobs/"]').first().click();
+  await expect(page.getByRole('heading', { name: 'Apply for this role' })).toBeVisible();
   await page.getByLabel('First name').fill('Esha');
   await page.getByLabel('Email').fill(`esha.${Date.now()}@example.com`);
   await page.getByLabel('Phone').fill('9876501234');
@@ -162,7 +174,7 @@ test('recruiting: bulk tag + bulk stage move, offer templates, reports PDF, care
 test('dark mode renders the main app pages legibly', async () => {
   test.setTimeout(240_000);
   const page = shared;
-  await login(page, 'hr@nimbus.test');
+  await freshLogin(page, 'hr@nimbus.test');
   await page.evaluate(() => localStorage.setItem('hrms-theme', 'dark'));
   await page.reload();
   await expect(page.locator('html')).toHaveClass(/dark/);
