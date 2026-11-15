@@ -30,12 +30,20 @@ stricter versions).
 
 ## Order matters
 
-1. **Deploy the new frontend first.** The deployed frontend subscribes to all chat tables on one Realtime channel. After
-   the migration three of those tables are no longer published, and Supabase then delivers *nothing* on such a channel
-   (verified live with a probe). The new frontend uses one channel per table and was verified live against the
-   current (pre-1200) schema. It also subscribes to the new signal table.
-2. Then apply migration 1200.
+1. **Deploy the new frontend first.** The pre-1200 frontend (any build from before this branch, including one
+   built from `cbf2caa`) subscribes to all chat tables on one Realtime channel. After the migration three of those
+   tables are no longer published, and Supabase then delivers *nothing* on such a channel (verified live with a probe).
+   The new frontend uses one channel per table and was verified live against the current (pre-1200) schema. It also
+   subscribes to the new signal table. If no frontend is deployed against this project yet, this step is a no-op.
+   **Confirm the new build is live before step 2:** in the browser devtools Network → WS tab, the Communication page
+   opens one Realtime channel per table (`chat-<company>-chat_messages-…`, `…-company_realtime_signals-…`, etc.)
+   rather than a single `chat-<company>-<random>` channel carrying every table.
+2. Then apply migration 1200 (`--only`, below). **Do not** use `npm run db:apply` / `supabase db push` here: they would
+   also apply 1300 and 1400 in the same run.
 3. Then run the live tests.
+4. Apply 1300 and 1400 separately afterwards (`--only 20261115001300`, then `--only 20261115001400`). 1300 backfills
+   the late/early flags with one `UPDATE` over every `attendance_records` row inside its transaction; clock-in/out
+   writes wait until it commits. Apply it outside working hours if that table is large.
 
 ## Steps
 
@@ -89,6 +97,19 @@ commit;
 ```
 Functions/policies from 1200 can stay in place during a rollback; they are compatible with the old frontend except for
 realtime delivery, which the publication change above restores. Restore from the backup for a full revert.
+
+Verify the rollback: the publication query above must list `announcements, chat_conversations, chat_messages,
+chat_participants, chat_reactions, chat_typing_status` (and no `company_realtime_signals`).
+
+### Frontend rollback ordering
+
+| Migration 1200 state | Rolling the frontend back to a pre-1200 build |
+|---|---|
+| Not applied | Safe at any time (redeploy the previous build). |
+| Applied | **Run the SQL rollback above first**, verify it, then redeploy the old build. The reverse order leaves the old frontend with no realtime events at all (silent: no error is shown). |
+
+The new frontend never needs to be rolled back because of the migration: it works on both schemas. See
+`DEPLOYMENT.md` section 6 for the full rollback matrix.
 
 ## Residual (documented, not fixed)
 
