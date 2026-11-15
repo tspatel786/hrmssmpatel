@@ -103,6 +103,8 @@ export function useSession() {
 interface CompanyValue {
   companies: CompanySummary[];
   companiesLoading: boolean;
+  /** set when the membership lookup failed: callers must not treat it as "no companies" */
+  companiesError: unknown;
   companyId: string | null;
   company: Company | null;
   permissions: Set<string>;
@@ -177,6 +179,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const value: CompanyValue = {
     companies,
     companiesLoading: boot.isLoading,
+    companiesError: boot.isError ? boot.error : null,
     companyId,
     company: details.data?.company ?? null,
     permissions,
