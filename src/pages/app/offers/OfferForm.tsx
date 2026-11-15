@@ -65,6 +65,8 @@ export function OfferFormModal({ open, onClose, application, offer, onSaved }: {
   const templates = useOfferTemplates();
   const save = useAction(async (v: Values) => {
     const data = clean(v as Record<string, unknown>);
+    // offers.template_id exists only after migration 1400 (templates query succeeds): otherwise never send it
+    if (!templates.isSuccess) delete data.template_id;
     if (offer) return (await api.db.update<{ id: string }>('offers', offer.id, data)).id;
     return (await api.db.insert<{ id: string }>('offers', { ...data, company_id: companyId, application_id: application!.id })).id;
   }, { success: offer ? 'Offer updated' : 'Offer drafted', onSuccess: (id) => onSaved?.(id) });
@@ -79,7 +81,7 @@ export function OfferFormModal({ open, onClose, application, offer, onSaved }: {
   };
   const cur = company?.currency ?? 'INR';
   const fields: FieldDef<Values>[] = [
-    { name: 'template_id', label: 'Letter template', type: 'select', options: (templates.data?.rows ?? []).map((t) => ({ value: t.id, label: `${t.name}${t.is_default ? ' (default)' : ''}` })), span: 2, hint: 'Controls the letter title and wording; manage templates on the Offers page' },
+    { name: 'template_id', label: 'Letter template', type: 'select', hidden: !templates.isSuccess || !templates.data?.rows.length, options: (templates.data?.rows ?? []).map((t) => ({ value: t.id, label: `${t.name}${t.is_default ? ' (default)' : ''}` })), span: 2, hint: 'Controls the letter title and wording; manage templates on the Offers page' },
     { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options },
     { name: 'department_id', label: 'Department', type: 'select', options: departments.options },
     { name: 'employment_type', label: 'Employment type', type: 'select', options: EMPLOYMENT_TYPES, required: true },

@@ -15,9 +15,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
-    { name: 'desktop', testIgnore: /communication\.spec|responsive\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173', viewport: { width: 1440, height: 900 } } },
+    { name: 'desktop', testIgnore: /communication\.spec|compat\.spec|responsive\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173', viewport: { width: 1440, height: 900 } } },
     { name: 'mobile', testMatch: /responsive\.spec/, use: { ...devices['Pixel 7'], baseURL: 'http://localhost:4173' } },
-    ...(live ? [{ name: 'supabase', testMatch: /communication\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4174' } }] : []),
+    ...(live ? [{ name: 'supabase', testMatch: /communication\.spec|compat\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4174' } }] : []),
   ],
   webServer: [
     { command: 'npm run build:demo && npm run preview:demo', url: 'http://localhost:4173', reuseExistingServer: false, timeout: 300_000 },
