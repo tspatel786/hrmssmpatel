@@ -7,9 +7,7 @@ export function trackErrors(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    // Email previews render in <iframe sandbox=""> (scripts intentionally disabled); Chrome logs this when the
-    // test driver probes that frame. It reflects the security sandbox working, not an application error.
-    if (m.type() === 'error' && !/Failed to load resource|Blocked script execution in 'about:srcdoc'/.test(m.text())) errors.push(`console: ${m.text()}`);
+    if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`);
   });
   return errors;
 }

@@ -65,11 +65,7 @@ export function OnboardingDetail() {
   const [cancelling, setCancelling] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', category: 'hr', due_date: '' });
 
-  // optimistic checkbox state: reflect the click immediately, reconcile with the server, revert on failure
-  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
-  const toggle = useAction(({ t, v }: { t: Task; v: boolean }) => api.db.update('onboarding_tasks', t.id, { is_completed: v }), {
-    onSuccess: (_r, { t }) => setOptimistic(({ [t.id]: _done, ...rest }) => rest),
-  });
+  const toggle = useAction(({ t, v }: { t: Task; v: boolean }) => api.db.update('onboarding_tasks', t.id, { is_completed: v }), { silent: false });
   const addTask = useAction(() => api.db.insert('onboarding_tasks', { company_id: companyId, onboarding_id: id, title: newTask.title.trim(), category: newTask.category, due_date: newTask.due_date || null, sort_order: (tasks.data?.rows.length ?? 0) + 10 }),
     { success: 'Task added', onSuccess: () => setNewTask({ title: '', category: 'hr', due_date: '' }) });
   const delTask = useAction((tid: string) => api.db.remove('onboarding_tasks', tid), { success: 'Task removed' });
@@ -110,12 +106,8 @@ export function OnboardingDetail() {
             <ul className="divide-y divide-slate-100">
               {rows.map((t) => (
                 <li key={t.id} className="flex items-start gap-3 px-5 py-3.5">
-                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600" checked={optimistic[t.id] ?? t.is_completed} disabled={!manage}
-                    onChange={(e) => {
-                      const v = e.target.checked;
-                      setOptimistic((o) => ({ ...o, [t.id]: v }));
-                      toggle.mutate({ t, v }, { onError: () => setOptimistic(({ [t.id]: _x, ...rest }) => rest) });
-                    }} aria-label={`Mark ${t.title} complete`} />
+                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600" checked={t.is_completed} disabled={!manage}
+                    onChange={(e) => toggle.mutate({ t, v: e.target.checked })} aria-label={`Mark ${t.title} complete`} />
                   <div className="min-w-0 flex-1">
                     <p className={`text-sm font-medium ${t.is_completed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{t.title}</p>
                     {t.description && <p className="text-xs text-slate-500">{t.description}</p>}

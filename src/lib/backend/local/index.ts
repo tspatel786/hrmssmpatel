@@ -6,7 +6,7 @@
 //   - email: queued emails are "delivered" by a mock worker (status=sent, provider=mock)
 import { PGlite } from '@electric-sql/pglite';
 import { BackendError, type AuthApi, type AuthUser, type Backend, type RealtimeApi, type StorageApi } from '../types';
-import { LocalDb, runAs, setDeferSync, type Claims } from './localDb';
+import { LocalDb, runAs, type Claims } from './localDb';
 
 const shimSql = import.meta.glob('../../../../supabase/local/shim.sql', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const migrationFiles = import.meta.glob('../../../../supabase/migrations/*.sql', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -216,14 +216,8 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
   const fresh = await migrate(pg);
   if (fresh && opts.seed !== false) {
     const { seedDemoData } = await import('./seed');
-    setDeferSync(true);
-    try {
-      await seedDemoData(pg);
-      await deliverQueuedEmails(pg);
-    } finally {
-      setDeferSync(false);
-    }
-    await pg.syncToFs(); // persist the whole seed in one flush
+    await seedDemoData(pg);
+    await deliverQueuedEmails(pg);
   }
   const auth = createLocalAuth(pg, () => undefined);
   const claims = (): Claims => {

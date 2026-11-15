@@ -34,12 +34,6 @@ function serialize(v: unknown): unknown {
   return v;
 }
 
-// Bulk operations (first-launch seeding) defer the per-transaction IndexedDB flush and sync once at the end.
-let deferSync = false;
-export function setDeferSync(v: boolean) {
-  deferSync = v;
-}
-
 export async function runAs<T>(db: PGlite, claims: Claims, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   try {
     const result = await db.transaction(async (tx) => {
@@ -51,7 +45,7 @@ export async function runAs<T>(db: PGlite, claims: Claims, fn: (tx: Transaction)
     });
     // PGlite skips the filesystem sync for COMMIT inside transaction(); flush explicitly so
     // committed data is durable in IndexedDB even if the page is reloaded right afterwards.
-    if (!deferSync) await db.syncToFs();
+    await db.syncToFs();
     return result;
   } catch (e) {
     if (e instanceof BackendError) throw e;
