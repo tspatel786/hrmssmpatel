@@ -326,6 +326,20 @@ export async function seedDemoData(pg: PGlite): Promise<void> {
   // candidate notes
   await recruiter.insert('candidate_notes', { company_id: company, candidate_id: (await hr.get<{ candidate_id: string }>('applications', app.Priya))!.candidate_id, body: 'Very strong culture fit. Expects joining bonus discussion.', created_by: users.recruiter });
 
+  // ---------- communication ----------
+  const employeeU = as('employee');
+  const dmHrEmp = await hr.rpc<string>('chat_start_direct', { p_company: company, p_user: users.employee });
+  await hr.rpc('chat_send_message', { p_conversation: dmHrEmp, p_body: 'Hi Sneha! Your leave request for next week is with Arjun for approval 👍' });
+  await employeeU.rpc('chat_send_message', { p_conversation: dmHrEmp, p_body: 'Thanks Neha! Could you also share the updated holiday calendar?' });
+  await hr.rpc('chat_send_message', { p_conversation: dmHrEmp, p_body: 'Sure — it is in Attendance → Holidays. I have also pinned an announcement.' });
+  const eng = await manager.rpc<string>('chat_create_group', { p_company: company, p_name: 'Engineering', p_description: 'Engineering team chat', p_members: [users.employee, users.recruiter, users.hr] });
+  await manager.rpc('chat_send_message', { p_conversation: eng, p_body: 'Team, we have 4 interviews lined up this week for the Senior Frontend role. Please block your calendars 🙏' });
+  const rec = await as('recruiter').rpc<{ id: string }>('chat_send_message', { p_conversation: eng, p_body: 'Invites are out. Feedback forms are in the Interviews page after each round.' });
+  await employeeU.rpc('chat_toggle_reaction', { p_message: rec.id, p_emoji: '👍' });
+  await manager.rpc('chat_toggle_pin', { p_message: rec.id });
+  await hr.insert('announcements', { company_id: company, title: 'Diwali celebrations 🪔', body: 'Join us on Friday at 4 PM in the cafeteria for Diwali celebrations. The office will close early at 5 PM.', pinned: true, requires_ack: true });
+  await hr.insert('announcements', { company_id: company, title: 'Engineering all-hands', body: 'Quarterly engineering all-hands on the 1st Monday of next month, 11 AM.', department_id: dept.Engineering });
+
   // ---------- realistic history: back-date timestamps (superuser SQL, demo only) ----------
   await pg.exec(`
     update public.jobs set published_at = now() - ((10 + (abs(hashtext(id::text)) % 35)) || ' days')::interval,

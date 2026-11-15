@@ -45,5 +45,8 @@ export const api = {
   get mode() {
     return getBackendSync().mode;
   },
+  get realtime() {
+    return getBackendSync().realtime;
+  },
   processEmails: () => getBackendSync().processEmails().catch(() => undefined),
 };

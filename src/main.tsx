@@ -5,7 +5,11 @@ import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import App from './App';
 import { AppBoot } from './components/AppBoot';
+import { installAudioUnlock } from './lib/chatNotify';
 import './index.css';
+
+// Unlock Web Audio on the very first user gesture (even while the app is still booting)
+installAudioUnlock();
 
 const queryClient = new QueryClient({
   defaultOptions: {

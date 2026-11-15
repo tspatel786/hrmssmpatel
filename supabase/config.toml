@@ -1,0 +1,5 @@
+# Minimal Supabase CLI config (project-level settings live in the dashboard).
+project_id = "talentflow-hrms"
+
+[functions.process-emails]
+verify_jwt = true

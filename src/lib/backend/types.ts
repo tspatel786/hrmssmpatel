@@ -59,8 +59,20 @@ export interface AuthApi {
   updatePassword(newPassword: string): Promise<void>;
 }
 
+export interface RealtimeEvent {
+  table: string; // '*' = resync request (reconnect / poll tick)
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE' | 'RESYNC';
+  new?: Record<string, unknown>;
+}
+
+export interface RealtimeApi {
+  /** Subscribe to row changes (RLS-filtered on the server). Returns an unsubscribe function. */
+  subscribe(channel: string, tables: string[], onEvent: (e: RealtimeEvent) => void): () => void;
+}
+
 export interface Backend {
   mode: 'supabase' | 'demo';
+  realtime: RealtimeApi;
   auth: AuthApi;
   db: DbApi;
   storage: StorageApi;

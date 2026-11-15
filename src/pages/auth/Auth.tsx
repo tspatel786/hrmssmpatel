@@ -54,26 +54,33 @@ const PasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTM
   );
 });
 
+/** Only allow same-origin relative paths for post-login redirects (blocks //host and /\host open redirects). */
+export function safeNext(next: string | null): string {
+  // must start with a single "/", never "//" or "/\", and contain no backslashes or whitespace
+  if (!next || !/^\/(?![/\\])[^\s\\]*$/.test(next)) return '/app';
+  return next;
+}
+
 const loginSchema = z.object({ email: z.string().trim().email('Enter a valid email'), password: z.string().min(1, 'Password is required') });
 
 export function Login() {
   const { user, setUser } = useSession();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const next = params.get('next') || '/app';
+  const next = safeNext(params.get('next'));
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: params.get('email') ?? '', password: params.get('email') && config.mode === 'demo' ? DEMO_PASSWORD : '' },
   });
   const [error, setError] = useState('');
-  if (user) return <Navigate to={next.startsWith('/') ? next : '/app'} replace />;
+  if (user) return <Navigate to={next} replace />;
 
   const onSubmit = form.handleSubmit(async (v) => {
     setError('');
     try {
       const u = await api.auth.signIn(v.email, v.password);
       setUser(u);
-      navigate(next.startsWith('/') ? next : '/app', { replace: true });
+      navigate(next, { replace: true });
     } catch (e) {
       setError((e as Error).message);
     }

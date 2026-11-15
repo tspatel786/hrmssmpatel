@@ -36,13 +36,17 @@ function serialize(v: unknown): unknown {
 
 export async function runAs<T>(db: PGlite, claims: Claims, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   try {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       await tx.query(`select set_config('request.jwt.claims', $1, true), set_config('role', $2, true)`, [
         JSON.stringify({ ...claims }),
         claims.role,
       ]);
       return fn(tx);
     });
+    // PGlite skips the filesystem sync for COMMIT inside transaction(); flush explicitly so
+    // committed data is durable in IndexedDB even if the page is reloaded right afterwards.
+    await db.syncToFs();
+    return result;
   } catch (e) {
     if (e instanceof BackendError) throw e;
     const err = e as { message?: string; code?: string };
@@ -51,7 +55,8 @@ export async function runAs<T>(db: PGlite, claims: Claims, fn: (tx: Transaction)
 }
 
 // cached metadata about functions: does it return a set?
-const fnCache = new Map<string, boolean>();
+type FnKind = 'set' | 'composite' | 'scalar';
+const fnCache = new Map<string, FnKind>();
 
 export class LocalDb implements DbApi {
   constructor(
@@ -63,7 +68,8 @@ export class LocalDb implements DbApi {
     const parts: string[] = [];
     for (const f of filters) {
       const col = assertIdent(f.column);
-      if (f.value === undefined) continue;
+      // a missing filter value must never widen a query: match nothing
+      if (f.value === undefined) { parts.push('false'); continue; }
       switch (f.op) {
         case 'eq': params.push(serialize(f.value)); parts.push(`${col} = $${params.length}`); break;
         case 'neq': params.push(serialize(f.value)); parts.push(`${col} is distinct from $${params.length}`); break;
@@ -194,22 +200,23 @@ export class LocalDb implements DbApi {
   async rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
     const name = assertIdent(fn);
     if (!fnCache.has(name)) {
-      const r = await this.db.query<{ retset: boolean }>(
-        `select p.proretset as retset from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-         where n.nspname = 'public' and p.proname = $1 limit 1`,
+      const r = await this.db.query<{ retset: boolean; typtype: string }>(
+        `select p.proretset as retset, t.typtype from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         join pg_type t on t.oid = p.prorettype where n.nspname = 'public' and p.proname = $1 limit 1`,
         [name],
       );
       if (!r.rows[0]) throw new BackendError(`Unknown function ${name}`);
-      fnCache.set(name, r.rows[0].retset);
+      fnCache.set(name, r.rows[0].retset ? 'set' : r.rows[0].typtype === 'c' ? 'composite' : 'scalar');
     }
-    const retset = fnCache.get(name)!;
+    const kind = fnCache.get(name)!;
     const keys = Object.keys(args).filter((k) => args[k] !== undefined);
     const params = keys.map((k) => serialize(args[k]));
     const argSql = keys.map((k, i) => `${assertIdent(k)} => $${i + 1}`).join(', ');
     return runAs(this.db, this.getClaims(), async (tx) => {
-      if (retset) {
+      if (kind !== 'scalar') {
         const res = await tx.query(`select * from public.${name}(${argSql})`, params, { parsers: PARSERS });
-        return res.rows as T;
+        // composite return types come back as a single object (same as PostgREST)
+        return (kind === 'set' ? res.rows : res.rows[0] ?? null) as T;
       }
       const res = await tx.query<{ result: T }>(`select public.${name}(${argSql}) as result`, params, { parsers: PARSERS });
       return res.rows[0]?.result as T;

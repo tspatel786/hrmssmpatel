@@ -43,6 +43,7 @@ const Notifications = l(() => import('./pages/app/Notifications'), 'Notification
 const Audit = l(() => import('./pages/app/Audit'), 'Audit');
 const Settings = l(() => import('./pages/app/settings/Settings'), 'Settings');
 const Profile = l(() => import('./pages/app/Profile'), 'Profile');
+const Communication = l(() => import('./pages/app/communication/Communication'), 'Communication');
 const Admin = l(() => import('./pages/admin/Admin'), 'Admin');
 const NotFound = l(() => import('./pages/NotFound'), 'NotFound');
 
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="communication" element={<Communication />} />
           <Route path="profile" element={<Profile />} />
           <Route path="recruitment/requisitions" element={<P perm={['requisitions.view', 'requisitions.manage', 'requisitions.approve']}><Requisitions /></P>} />
           <Route path="recruitment/jobs" element={<P perm={['jobs.view', 'jobs.manage']}><Jobs /></P>} />

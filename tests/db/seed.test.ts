@@ -19,6 +19,8 @@ describe('Demo seed', () => {
       (select count(*)::int from offers where status = 'sent') sent_offers, (select count(*)::int from payslips) payslips,
       (select count(*)::int from email_logs where status = 'queued') queued`);
     expect(counts).toMatchObject({ companies: 2, employees: 14, applications: 14, interviews: 6, sent_offers: 1, payslips: 14, queued: 0 });
+    const [chat] = await sql<{ convs: number; msgs: number }>(pg, `select (select count(*)::int from chat_conversations) convs, (select count(*)::int from chat_messages) msgs`);
+    expect(chat).toEqual({ convs: 2, msgs: 6 });
     const [hr] = await sql<{ id: string }>(pg, `select id from auth.users where email = 'hr@nimbus.test'`);
     const [co] = await sql<{ id: string }>(pg, `select id from companies where slug = 'nimbus'`);
     const stats = await clientFor(pg, hr.id).rpc<{ headcount: number; open_jobs: number }>('dashboard_stats', { p_company: co.id });

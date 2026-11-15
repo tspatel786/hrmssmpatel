@@ -5,7 +5,7 @@
 //   - storage: bytes stored in storage.objects (shim column) through RLS
 //   - email: queued emails are "delivered" by a mock worker (status=sent, provider=mock)
 import { PGlite } from '@electric-sql/pglite';
-import { BackendError, type AuthApi, type AuthUser, type Backend, type StorageApi } from '../types';
+import { BackendError, type AuthApi, type AuthUser, type Backend, type RealtimeApi, type StorageApi } from '../types';
 import { LocalDb, runAs, type Claims } from './localDb';
 
 const shimSql = import.meta.glob('../../../../supabase/local/shim.sql', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -238,7 +238,14 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
     }, 400);
   };
   setInterval(() => void processEmails(), 15000);
-  return { mode: 'demo', auth, db, storage: createLocalStorage(pg, claims), processEmails };
+  // Demo realtime: one in-browser database per tab, so a short poll is an exact equivalent of change feeds.
+  const realtime: RealtimeApi = {
+    subscribe(_channel, _tables, onEvent) {
+      const t = setInterval(() => onEvent({ table: '*', eventType: 'RESYNC' }), 2500);
+      return () => clearInterval(t);
+    },
+  };
+  return { mode: 'demo', realtime, auth, db, storage: createLocalStorage(pg, claims), processEmails };
 }
 
 /** Wipes the in-browser demo database (used by "Reset demo data"). */

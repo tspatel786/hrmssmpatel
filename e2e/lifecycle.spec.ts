@@ -40,7 +40,7 @@ test('complete hiring lifecycle through the UI', async ({ page }) => {
   await page.getByRole('link', { name: /QA Automation Engineer/ }).click();
   await page.getByLabel('First name').fill('Asha');
   await page.getByLabel('Last name').fill('Verma');
-  await page.getByLabel('Email', { exact: true }).fill('asha.verma@example.com');
+  await page.locator('#em').fill('asha.verma@example.com');
   await page.getByLabel('Phone').fill('+91 99887 76655');
   await page.getByLabel(/Expected CTC/).fill('1500000');
   await page.locator('input[type=file]').setInputFiles({ name: 'Asha-Verma-CV.pdf', mimeType: 'application/pdf', buffer: samplePdf() });

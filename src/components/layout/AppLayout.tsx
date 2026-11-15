@@ -2,10 +2,11 @@ import clsx from 'clsx';
 import {
   BarChart3, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileSignature, FileText,
   KanbanSquare, LayoutDashboard, LogOut, Mail, Menu, Network, Plane, Settings, ShieldCheck, UserCheck, UserCircle, Users,
-  UsersRound, Wallet, X, History, Crown, Check,
+  UsersRound, Wallet, X, History, Crown, Check, MessagesSquare,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ChatProvider, useChat } from '@/contexts/chat';
 import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { config } from '@/lib/config';
@@ -19,6 +20,7 @@ interface NavItem {
   icon: ReactNode;
   perm?: string | string[];
   end?: boolean;
+  badge?: 'chat';
 }
 interface NavGroup {
   label: string;
@@ -32,6 +34,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: '/app', label: 'Dashboard', icon: <LayoutDashboard className={ic} />, end: true },
       { to: '/app/notifications', label: 'Notifications', icon: <Bell className={ic} /> },
+      { to: '/app/communication', label: 'Communication', icon: <MessagesSquare className={ic} />, badge: 'chat' },
     ],
   },
   {
@@ -70,6 +73,7 @@ export const NAV: NavGroup[] = [
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { can, company, isSuperAdmin } = useCompany();
+  const { unreadTotal } = useChat();
   return (
     <div className="flex h-full flex-col bg-slate-900">
       <Link to="/app" className="flex h-16 shrink-0 items-center gap-2.5 px-5" onClick={onNavigate}>
@@ -93,6 +97,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       className={({ isActive }) => clsx('nav-link', isActive && 'nav-link-active')}>
                       {i.icon}
                       {i.label}
+                      {i.badge === 'chat' && unreadTotal > 0 && (
+                        <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white" aria-label={`${unreadTotal} unread messages`}>
+                          {unreadTotal > 99 ? '99+' : unreadTotal}
+                        </span>
+                      )}
                     </NavLink>
                   </li>
                 ))}
@@ -279,6 +288,7 @@ export function AppLayout() {
   if (!companies.length) return <Navigate to={isSuperAdmin ? '/admin' : '/onboarding/company'} replace />;
 
   return (
+    <ChatProvider>
     <div className="min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block"><Sidebar /></aside>
       {mobileOpen && (
@@ -310,6 +320,7 @@ export function AppLayout() {
         <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8"><Outlet /></main>
       </div>
     </div>
+    </ChatProvider>
   );
 }
 

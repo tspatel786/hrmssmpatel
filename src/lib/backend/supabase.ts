@@ -8,6 +8,7 @@ import {
   type DbApi,
   type Filter,
   type ListQuery,
+  type RealtimeApi,
   type StorageApi,
 } from './types';
 
@@ -21,7 +22,8 @@ function check<T>(res: { data: T; error: { message: string; code?: string } | nu
 
 function applyFilters(q: Q, filters: Filter[] = []): Q {
   for (const f of filters) {
-    if (f.value === undefined) continue;
+    // a missing filter value must never widen a query: match nothing
+    if (f.value === undefined) { q = q.in(f.column, []); continue; }
     switch (f.op) {
       case 'eq': q = q.eq(f.column, f.value); break;
       case 'neq': q = q.neq(f.column, f.value); break;
@@ -40,7 +42,7 @@ function applyFilters(q: Q, filters: Filter[] = []): Q {
   return q;
 }
 
-function createDb(sb: SupabaseClient): DbApi {
+export function createDb(sb: SupabaseClient): DbApi {
   return {
     async list<T>(query: ListQuery) {
       let q: Q = sb.from(query.table).select(query.columns || '*', { count: query.count === false ? undefined : 'exact' });
@@ -84,7 +86,7 @@ function createDb(sb: SupabaseClient): DbApi {
   };
 }
 
-function createStorage(sb: SupabaseClient): StorageApi {
+export function createStorage(sb: SupabaseClient): StorageApi {
   return {
     async upload(bucket, path, file, contentType) {
       // anonymous careers uploads are insert-only (no upsert => no select/update policy needed)
@@ -154,10 +156,37 @@ function createAuth(sb: SupabaseClient): AuthApi {
   };
 }
 
+function createRealtime(sb: SupabaseClient): RealtimeApi {
+  return {
+    subscribe(channel, tables, onEvent) {
+      let subscribedOnce = false;
+      const ch = sb.channel(`${channel}-${Math.random().toString(36).slice(2, 8)}`);
+      for (const table of tables) {
+        ch.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) =>
+          onEvent({ table, eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE', new: payload.new as Record<string, unknown> }));
+      }
+      ch.subscribe((status) => {
+        // after a reconnect, ask consumers to resync anything missed while offline
+        if (status === 'SUBSCRIBED') {
+          if (subscribedOnce) onEvent({ table: '*', eventType: 'RESYNC' });
+          subscribedOnce = true;
+        }
+      });
+      const onOnline = () => onEvent({ table: '*', eventType: 'RESYNC' });
+      window.addEventListener('online', onOnline);
+      return () => {
+        window.removeEventListener('online', onOnline);
+        void sb.removeChannel(ch);
+      };
+    },
+  };
+}
+
 export function createSupabaseBackend(url: string, anonKey: string): Backend {
   const sb = createClient(url, anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   return {
     mode: 'supabase',
+    realtime: createRealtime(sb),
     auth: createAuth(sb),
     db: createDb(sb),
     storage: createStorage(sb),

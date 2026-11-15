@@ -1,7 +1,9 @@
 import clsx from 'clsx';
 import { AlertTriangle, ChevronLeft, ChevronRight, Inbox, Loader2, Search, X } from 'lucide-react';
 import {
+  cloneElement,
   forwardRef,
+  isValidElement,
   useEffect,
   useId,
   useRef,
@@ -80,15 +82,20 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 export function Field({ label, error, hint, required, children, className, htmlFor }: {
   label?: string; error?: string; hint?: string; required?: boolean; children: ReactNode; className?: string; htmlFor?: string;
 }) {
+  // Associate the label with its control even when callers don't pass an id (accessibility + testability).
+  const autoId = useId();
+  const child = isValidElement<{ id?: string }>(children) ? children : null;
+  const id = htmlFor ?? child?.props.id ?? autoId;
+  const control = child && !child.props.id && !htmlFor ? cloneElement(child, { id }) : children;
   return (
     <div className={className}>
       {label && (
-        <label className="label" htmlFor={htmlFor}>
+        <label className="label" htmlFor={id}>
           {label}
-          {required && <span className="ml-0.5 text-rose-500">*</span>}
+          {required && <span className="ml-0.5 text-rose-500" aria-hidden>*</span>}
         </label>
       )}
-      {children}
+      {control}
       {error ? <p className="error-text" role="alert">{error}</p> : hint ? <p className="hint">{hint}</p> : null}
     </div>
   );

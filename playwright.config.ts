@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Two targets:
+//  - "desktop"/"mobile": demo build (in-browser Postgres, mock email) on :4173 — no credentials needed
+//  - "supabase": Supabase-mode build on :4174 against the configured project (set SUPABASE_LIVE=1)
+const live = process.env.SUPABASE_LIVE === '1';
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 120_000,
@@ -8,18 +13,14 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
-  use: {
-    baseURL: 'http://localhost:4173',
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-  },
+  use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+    { name: 'desktop', testIgnore: /communication\.spec|responsive\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173', viewport: { width: 1440, height: 900 } } },
+    { name: 'mobile', testMatch: /responsive\.spec/, use: { ...devices['Pixel 7'], baseURL: 'http://localhost:4173' } },
+    ...(live ? [{ name: 'supabase', testMatch: /communication\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4174' } }] : []),
   ],
-  webServer: {
-    command: 'npm run preview -- --port 4173 --strictPort',
-    url: 'http://localhost:4173',
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  webServer: [
+    { command: 'npm run build:demo && npm run preview:demo', url: 'http://localhost:4173', reuseExistingServer: false, timeout: 300_000 },
+    ...(live ? [{ command: 'npx vite build --outDir dist-live && npx vite preview --outDir dist-live --port 4174 --strictPort', url: 'http://localhost:4174', reuseExistingServer: false, timeout: 300_000 }] : []),
+  ],
 });
