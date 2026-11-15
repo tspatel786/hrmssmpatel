@@ -1,0 +1,34 @@
+import { chromium } from "@playwright/test";
+const out = process.argv[2];
+const routes = ['/app','/app/notifications','/app/profile','/app/recruitment/requisitions','/app/recruitment/jobs','/app/recruitment/candidates','/app/recruitment/pipeline','/app/recruitment/interviews','/app/offers','/app/onboarding','/app/employees','/app/organization','/app/attendance','/app/leave','/app/payroll','/app/payroll/my-payslips','/app/reports','/app/emails','/app/audit','/app/settings'];
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const page = await ctx.newPage();
+const errors = [];
+page.on('console', (m) => { if (m.type() === 'error') errors.push(`[console] ${page.url()} ${m.text()}`); });
+page.on('pageerror', (e) => errors.push(`[pageerror] ${page.url()} ${e.message}`));
+const t0 = Date.now();
+await page.goto('http://localhost:4173/');
+await page.waitForSelector('text=Hire, onboard', { timeout: 180000 });
+console.log('boot+seed ms', Date.now() - t0);
+await page.screenshot({ path: `${out}/landing.png`, fullPage: true });
+await page.goto('http://localhost:4173/login?email=hr@nimbus.test');
+await page.click('button[type=submit]');
+await page.waitForURL('**/app', { timeout: 60000 });
+await page.waitForTimeout(1500);
+const t1 = Date.now();
+await page.reload();
+await page.waitForSelector('main', { timeout: 120000 });
+console.log('reload boot ms', Date.now() - t1);
+for (const r of routes) {
+  await page.evaluate((path) => { history.pushState({}, '', path); dispatchEvent(new PopStateEvent('popstate')); }, r);
+  await page.waitForTimeout(1500);
+  const name = r.replace(/\//g, '_') || 'root';
+  await page.screenshot({ path: `${out}/${name}.png`, fullPage: false });
+  const txt = await page.locator('main').innerText().catch(() => '');
+  if (/Could not load data|Something went wrong/.test(txt)) errors.push(`[ui-error] ${r}: ${txt.slice(0, 300)}`);
+}
+await page.goto('http://localhost:4173/careers/nimbus'); await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}/careers.png`, fullPage: true });
+console.log(errors.length ? errors.join('\n') : 'NO ERRORS');
+await browser.close();

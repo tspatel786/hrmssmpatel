@@ -1,0 +1,11 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch();
+const page = await (await browser.newContext()).newPage();
+page.on('pageerror', (e) => console.log('PAGEERROR', e.message, '\n', (e.stack || '').split('\n').slice(0, 8).join('\n')));
+page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) console.log('CONSOLE', m.type(), m.text().slice(0, 300)); });
+await page.goto('http://localhost:4173/');
+await page.waitForSelector('text=Hire, onboard', { timeout: 180000 });
+await page.reload();
+await page.waitForSelector('text=Hire, onboard', { timeout: 180000 });
+console.log('done');
+await browser.close();
