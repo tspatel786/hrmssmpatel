@@ -1,11 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { z } from 'zod';
 import { clean, FormFields, type FieldDef } from '@/components/FormModal';
 import { Button, Modal } from '@/components/ui';
 import { useCompany } from '@/contexts/session';
 import { api } from '@/lib/backend';
+import { appBaseUrl } from '@/lib/config';
 import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, GENDERS, opts } from '@/lib/constants';
 import { useAction } from '@/lib/hooks';
 import { useDepartments, useDesignations, useEmployeeOptions } from '@/lib/lookups';
@@ -58,9 +60,24 @@ export function EmployeeForm({ open, onClose, employee, onSaved }: { open: boole
     void _p;
     const data = clean({ ...rest, email: rest.email.toLowerCase() } as Record<string, unknown>);
     for (const k of ['ctc_annual', 'basic_monthly', 'hra_monthly', 'allowances_monthly', 'fixed_deductions_monthly']) data[k] = data[k] ?? 0;
-    if (employee) return (await api.db.update<{ id: string }>('employees', employee.id, { ...data, employee_code: data.employee_code ?? employee.employee_code })).id;
-    return (await api.db.insert<{ id: string }>('employees', { ...data, employee_code: data.employee_code ?? '', company_id: companyId })).id;
-  }, { success: employee ? 'Employee updated' : 'Employee created', onSuccess: (id) => onSaved?.(id), silent: true });
+    if (employee) return { id: (await api.db.update<{ id: string }>('employees', employee.id, { ...data, employee_code: data.employee_code ?? employee.employee_code })).id, access: null };
+    const id = (await api.db.insert<{ id: string }>('employees', { ...data, employee_code: data.employee_code ?? '', company_id: companyId })).id;
+    // HRMS access is set up automatically: the new employee is invited with the Employee role (an existing account is
+    // linked straight away). A failure here never undoes the saved employee; HR can retry with "Give HRMS access".
+    let access: string | null = null;
+    if (['active', 'probation'].includes(String(data.status ?? 'active'))) {
+      try {
+        const role = await api.db.list<{ id: string }>({ table: 'roles', filters: [{ column: 'company_id', op: 'eq', value: companyId }, { column: 'name', op: 'eq', value: 'Employee' }], count: false });
+        if (role.rows[0]) {
+          const r = await api.db.rpc<{ status: string }>('invite_member', { p_company: companyId, p_email: data.email, p_role: role.rows[0].id, p_employee: id, p_base_url: appBaseUrl() });
+          access = r.status === 'invited' ? `invitation emailed to ${String(data.email)}` : 'HRMS access granted';
+        }
+      } catch (e) {
+        toast.warning(`Employee saved, but HRMS access was not set up: ${(e as Error).message}. Use "Give HRMS access" on the profile.`);
+      }
+    }
+    return { id, access };
+  }, { success: (r) => (employee ? 'Employee updated' : r.access ? `Employee created · ${r.access}` : 'Employee created'), onSuccess: (r) => onSaved?.(r.id), silent: true });
 
   const cur = company?.currency ?? 'INR';
   const sections: { title: string; fields: FieldDef<Values>[] }[] = [

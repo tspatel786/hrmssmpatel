@@ -7,8 +7,9 @@ import { clientFor, createTestDb, createUser, sql } from './harness';
 const EXPECTED: Record<string, string[]> = {
   Recruiter: ['candidates.manage', 'candidates.view', 'dashboard.view', 'departments.view', 'emails.manage', 'interviews.manage', 'interviews.view',
     'jobs.manage', 'jobs.view', 'offers.manage', 'offers.view', 'onboarding.manage', 'onboarding.view', 'reports.view', 'requisitions.manage', 'requisitions.view'],
+  // requisitions.approve added by migration 1500 (managers approve hiring requests; self-approval stays blocked)
   'Hiring Manager': ['candidates.view', 'dashboard.view', 'departments.view', 'employees.view', 'interviews.view', 'jobs.view', 'leave.approve',
-    'offers.approve', 'offers.view', 'reports.view', 'requisitions.manage', 'requisitions.view'],
+    'offers.approve', 'offers.view', 'reports.view', 'requisitions.approve', 'requisitions.manage', 'requisitions.view'],
   'Payroll Manager': ['attendance.view', 'dashboard.view', 'departments.view', 'employees.view', 'leave.view', 'payroll.manage', 'payroll.view', 'reports.view'],
   // Interviewer and Employee hold no company-wide permission: access comes from ownership rules (own records, assigned interviews)
   Interviewer: [],

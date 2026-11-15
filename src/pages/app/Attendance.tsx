@@ -198,9 +198,10 @@ function DailyRegister({ companyId }: { companyId: string }) {
   );
 }
 
-function Records({ companyId }: { companyId: string }) {
+/** All attendance records; with `employeeIds`, only those employees (a manager's direct reports). */
+function Records({ companyId, employeeIds }: { companyId: string; employeeIds?: string[] }) {
   const depts = useDepartments();
-  const table = useTable({ table: 'v_attendance', companyId, searchColumns: ['employee_name', 'employee_code'], defaultSort: { column: 'attendance_date', ascending: false }, filterOps: { attendance_date__from: 'gte', attendance_date__to: 'lte' } });
+  const table = useTable({ table: 'v_attendance', companyId, baseFilters: employeeIds ? [{ column: 'employee_id', op: 'in', value: employeeIds }] : undefined, searchColumns: ['employee_name', 'employee_code'], defaultSort: { column: 'attendance_date', ascending: false }, filterOps: { attendance_date__from: 'gte', attendance_date__to: 'lte' } });
   const columns: Column<Rec>[] = [
     { key: 'attendance_date', header: 'Date', sortable: true, render: (r) => fmtDate(r.attendance_date, 'EEE, dd MMM yyyy') },
     { key: 'employee_name', header: 'Employee', sortable: true, render: (r) => <span><span className="font-medium">{r.employee_name}</span> <span className="text-xs text-slate-400">{r.employee_code}</span></span> },
@@ -213,7 +214,7 @@ function Records({ companyId }: { companyId: string }) {
     { key: 'source', header: 'Source', hideOnMobile: true, render: (r) => titleCase(r.source) },
   ];
   return (
-    <DataTable table={table} columns={columns} searchPlaceholder="Search employee" exportName="attendance"
+    <DataTable table={table} columns={columns} searchPlaceholder="Search employee" exportName={employeeIds ? 'team-attendance' : 'attendance'}
       toolbar={<div className="flex items-center gap-2">
         <Input type="date" className="w-auto py-1.5" aria-label="From date" value={table.filters.attendance_date__from ?? ''} onChange={(e) => table.setFilter('attendance_date__from', e.target.value)} />
         <span className="text-slate-400">–</span>
@@ -263,9 +264,13 @@ export function Attendance() {
   const { companyId, can } = useCompany();
   const me = useRpc<{ employee: { id: string } | null }>('my_dashboard', companyId ? { p_company: companyId } : null);
   const employeeId = me.data?.employee?.id;
-  type TabKey = 'mine' | 'register' | 'records' | 'corrections' | 'holidays';
+  // direct reports (migration 1500); the tab stays hidden where team_dashboard is unavailable
+  const team = useRpc<{ team_size: number; members: { id: string }[] }>('team_dashboard', employeeId && companyId ? { p_company: companyId } : null);
+  const teamIds = team.data && team.data.team_size > 0 ? team.data.members.map((m) => m.id) : null;
+  type TabKey = 'mine' | 'team' | 'register' | 'records' | 'corrections' | 'holidays';
   const tabs: { value: TabKey; label: string }[] = [
     ...(employeeId ? [{ value: 'mine' as const, label: 'My attendance' }] : []),
+    ...(teamIds ? [{ value: 'team' as const, label: 'My team' }] : []),
     ...(can('attendance.view') ? [{ value: 'register' as const, label: 'Daily register' }, { value: 'records' as const, label: 'All records' }] : []),
     ...(employeeId || can('attendance.view') ? [{ value: 'corrections' as const, label: 'Corrections' }] : []),
     { value: 'holidays' as const, label: 'Holidays' },
@@ -279,6 +284,7 @@ export function Attendance() {
       <PageHeader title="Attendance" description="Clock in and out, review attendance and manage the holiday calendar." />
       <Tabs className="mb-5" value={active} onChange={setTab} tabs={tabs} />
       {active === 'mine' && employeeId && <MyAttendance companyId={companyId} employeeId={employeeId} />}
+      {active === 'team' && teamIds && <Records companyId={companyId} employeeIds={teamIds} />}
       {active === 'register' && <DailyRegister companyId={companyId} />}
       {active === 'records' && <Records companyId={companyId} />}
       {active === 'corrections' && <CorrectionsPanel companyId={companyId} myEmployeeId={employeeId} />}

@@ -62,7 +62,9 @@ export function EmployeeDetail() {
   const cur = company?.currency;
   const manage = can('employees.manage');
   const showPay = can(['employees.manage', 'payroll.view']) || !manage;
-  const roleOptions = roles.options.filter((r) => r.label !== 'Company Admin' || can('users.manage'));
+  // Company Admins (users.manage) may grant any role; HR (employees.manage) only the built-in Employee role
+  const fullInvite = can('users.manage');
+  const roleOptions = fullInvite ? roles.options : roles.options.filter((r) => r.label === 'Employee');
 
   return (
     <>
@@ -84,7 +86,7 @@ export function EmployeeDetail() {
           </div>
           {manage && (
             <div className="flex shrink-0 flex-wrap gap-2">
-              {!e.user_id && can('users.manage') && <Button variant="secondary" icon={<KeyRound className="h-4 w-4" />} onClick={() => { setRole(roles.rows.find((r) => r.name === 'Employee')?.id as string ?? ''); setInviting(true); }}>Give HRMS access</Button>}
+              {!e.user_id && (can('users.manage') || can('employees.manage')) && <Button variant="secondary" icon={<KeyRound className="h-4 w-4" />} onClick={() => { setRole(roles.rows.find((r) => r.name === 'Employee')?.id as string ?? ''); setInviting(true); }}>Give HRMS access</Button>}
               <Button variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>Edit</Button>
               <Button variant="ghost" aria-label="Delete employee" onClick={() => setDeleting(true)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
             </div>
@@ -196,7 +198,9 @@ export function EmployeeDetail() {
       <Modal open={inviting} onClose={() => setInviting(false)} title="Give HRMS access" size="sm"
         footer={<><Button variant="secondary" onClick={() => setInviting(false)}>Cancel</Button><Button disabled={!role} loading={invite.isPending} onClick={() => invite.mutate()}>Send invitation</Button></>}>
         <p className="text-sm text-slate-600">An invitation will be emailed to <strong>{e.email}</strong>. When they sign up with this email, they'll be linked to this employee profile.</p>
-        <Field label="Role" className="mt-4"><Select value={role} onChange={(ev) => setRole(ev.target.value)} options={roleOptions} placeholder="Select role" /></Field>
+        <Field label="Role" className="mt-4" hint={fullInvite ? undefined : 'HR can grant the Employee role. A Company Admin can grant other roles later in Settings → Users.'}>
+          <Select value={role} onChange={(ev) => setRole(ev.target.value)} options={roleOptions} placeholder="Select role" />
+        </Field>
       </Modal>
     </>
   );
