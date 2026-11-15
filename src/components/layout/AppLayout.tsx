@@ -13,7 +13,7 @@ import { config } from '@/lib/config';
 import { fmtRelative } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
 import { useTheme, type ThemePref } from '@/lib/theme';
-import { Avatar, Badge, PageLoader } from '../ui';
+import { Avatar, Badge, ErrorState, PageLoader } from '../ui';
 
 const NEXT_THEME: Record<ThemePref, ThemePref> = { light: 'dark', dark: 'system', system: 'light' };
 const THEME_LABEL: Record<ThemePref, string> = { light: 'Light theme', dark: 'Dark theme', system: 'System theme' };
@@ -292,13 +292,15 @@ function UserMenu() {
 
 export function AppLayout() {
   const { user, loading } = useSession();
-  const { companies, companiesLoading, ready, isSuperAdmin, company } = useCompany();
+  const { companies, companiesLoading, companiesError, ready, isSuperAdmin, company, refresh } = useCompany();
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
   if (loading || (user && (companiesLoading || !ready))) return <div className="flex min-h-screen items-center justify-center"><PageLoader label="Loading your workspace…" /></div>;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  // a failed lookup is not "no companies": never send an existing member to the create-company page because of an error
+  if (companiesError) return <div className="flex min-h-screen items-center justify-center"><ErrorState error={companiesError} onRetry={() => void refresh()} /></div>;
   if (!companies.length) return <Navigate to={isSuperAdmin ? '/admin' : '/onboarding/company'} replace />;
 
   return (
