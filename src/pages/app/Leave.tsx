@@ -13,6 +13,7 @@ import { fmtDate, fmtRelative } from '@/lib/format';
 import { useAction, useList, useRpc, useTable } from '@/lib/hooks';
 import { useEmployeeOptions, useLeaveTypes } from '@/lib/lookups';
 import { reqDate, reqNum, reqStr } from '@/lib/schemas';
+import { LeaveCalendar } from './LeaveCalendar';
 
 interface Req { id: string; employee_id: string; employee_name: string; employee_code: string; leave_type_id: string; leave_type_name: string; leave_type_color: string; is_paid: boolean; start_date: string; end_date: string; half_day: boolean; days: number; reason: string; status: string; approver_name: string | null; decided_at: string | null; decision_note: string | null; created_at: string; manager_id: string | null; department_name: string | null }
 interface Bal { id: string; employee_id: string; employee_name: string; employee_code: string; leave_type_id: string; leave_type_name: string; leave_type_color: string; year: number; allocated: number; used: number; available: number }
@@ -205,7 +206,7 @@ function LeaveTypes({ companyId }: { companyId: string }) {
   );
 }
 
-type TabKey = 'mine' | 'approvals' | 'all' | 'balances' | 'types';
+type TabKey = 'mine' | 'calendar' | 'approvals' | 'all' | 'balances' | 'types';
 export function Leave() {
   const { companyId, can } = useCompany();
   const [params, setParams] = useSearchParams();
@@ -214,6 +215,7 @@ export function Leave() {
   const isManager = (me.data?.team_pending_leave ?? 0) > 0;
   const tabs: { value: TabKey; label: string }[] = [
     ...(employeeId ? [{ value: 'mine' as const, label: 'My leave' }] : []),
+    ...(employeeId || can('leave.view') || can('leave.approve') ? [{ value: 'calendar' as const, label: 'Team calendar' }] : []),
     ...(can('leave.approve') || isManager ? [{ value: 'approvals' as const, label: 'Approvals' }] : []),
     ...(can('leave.view') ? [{ value: 'all' as const, label: 'All requests' }, { value: 'balances' as const, label: 'Balances' }] : []),
     ...(can('leave.manage') ? [{ value: 'types' as const, label: 'Leave types' }] : []),
@@ -228,6 +230,7 @@ export function Leave() {
         <>
           <Tabs className="mb-5" value={active!} onChange={(t) => setParams({ tab: t }, { replace: true })} tabs={tabs} />
           {active === 'mine' && employeeId && <MyLeave companyId={companyId} employeeId={employeeId} />}
+          {active === 'calendar' && <LeaveCalendar companyId={companyId} />}
           {active === 'approvals' && <Approvals companyId={companyId} myEmployeeId={employeeId} />}
           {active === 'all' && <AllRequests companyId={companyId} />}
           {active === 'balances' && <Balances companyId={companyId} />}

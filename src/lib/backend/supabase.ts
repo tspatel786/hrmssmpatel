@@ -159,24 +159,29 @@ function createAuth(sb: SupabaseClient): AuthApi {
 function createRealtime(sb: SupabaseClient): RealtimeApi {
   return {
     subscribe(channel, tables, onEvent) {
-      let subscribedOnce = false;
-      const ch = sb.channel(`${channel}-${Math.random().toString(36).slice(2, 8)}`);
-      for (const table of tables) {
+      // One channel per table: Supabase Realtime silently delivers NOTHING on a channel if any of its postgres_changes
+      // bindings names a table that is missing or not published (verified live). Separate channels keep the others working
+      // across schema versions (e.g. before/after migration 1200 changes which chat tables are published).
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const channels = tables.map((table) => {
+        let subscribedOnce = false;
+        const ch = sb.channel(`${channel}-${table}-${suffix}`);
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) =>
           onEvent({ table, eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE', new: payload.new as Record<string, unknown> }));
-      }
-      ch.subscribe((status) => {
-        // after a reconnect, ask consumers to resync anything missed while offline
-        if (status === 'SUBSCRIBED') {
-          if (subscribedOnce) onEvent({ table: '*', eventType: 'RESYNC' });
-          subscribedOnce = true;
-        }
+        ch.subscribe((status) => {
+          // after a reconnect, ask consumers to resync anything missed while offline
+          if (status === 'SUBSCRIBED') {
+            if (subscribedOnce) onEvent({ table: '*', eventType: 'RESYNC' });
+            subscribedOnce = true;
+          }
+        });
+        return ch;
       });
       const onOnline = () => onEvent({ table: '*', eventType: 'RESYNC' });
       window.addEventListener('online', onOnline);
       return () => {
         window.removeEventListener('online', onOnline);
-        void sb.removeChannel(ch);
+        for (const ch of channels) void sb.removeChannel(ch);
       };
     },
   };

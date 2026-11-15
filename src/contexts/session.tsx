@@ -40,6 +40,7 @@ export interface Company {
   work_start: string;
   work_end: string;
   working_days: number[];
+  late_grace_minutes?: number;
   pf_enabled: boolean;
   pf_percent: number;
   professional_tax: number;

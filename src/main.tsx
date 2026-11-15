@@ -7,9 +7,18 @@ import App from './App';
 import { AppBoot } from './components/AppBoot';
 import { installAudioUnlock } from './lib/chatNotify';
 import './index.css';
+import './styles/dark.css';
+import { installTheme, useTheme } from './lib/theme';
 
 // Unlock Web Audio on the very first user gesture (even while the app is still booting)
 installAudioUnlock();
+// Apply the saved light/dark preference before the first render (no flash)
+installTheme();
+
+function ThemedToaster() {
+  const { resolved } = useTheme();
+  return <Toaster richColors position="top-right" closeButton theme={resolved} />;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +33,7 @@ createRoot(document.getElementById('root')!).render(
         <AppBoot>
           <App />
         </AppBoot>
-        <Toaster richColors position="top-right" closeButton />
+        <ThemedToaster />
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

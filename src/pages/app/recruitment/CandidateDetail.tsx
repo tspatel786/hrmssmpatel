@@ -150,6 +150,7 @@ export function CandidateDetail() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <Link to={`/app/recruitment/jobs/${a.job_id}`} className="font-semibold text-slate-900 hover:underline">{a.job_title}</Link>
+                          <span className="ml-2 font-mono text-[11px] text-slate-400" title="Application reference">{`APP-${a.id.replace(/-/g, '').slice(0, 8).toUpperCase()}`}</span>
                           <p className="text-xs text-slate-500">Applied {fmtRelative(a.applied_at)} via {titleCase(a.source)} · {a.department_name ?? '—'}</p>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <Badge tone={st.tone} dot>{st.label}</Badge>
@@ -282,6 +283,7 @@ export function CandidateDetail() {
           <Card title="Profile">
             <DescriptionList cols={1} items={[
               { label: 'Experience', value: c.experience_years != null ? `${c.experience_years} years` : '—' },
+              { label: 'Education', value: c.highest_qualification ? `${c.highest_qualification}${c.institution ? `, ${c.institution}` : ''}${c.graduation_year ? ` (${c.graduation_year})` : ''}` : '—' },
               { label: 'Current CTC', value: fmtMoney(c.current_ctc, company?.currency) },
               { label: 'Expected CTC', value: fmtMoney(c.expected_ctc, company?.currency) },
               { label: 'Notice period', value: c.notice_period_days != null ? `${c.notice_period_days} days` : '—' },

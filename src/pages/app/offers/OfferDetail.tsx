@@ -12,6 +12,7 @@ import { fmtDate, fmtDateTime, fmtMoney, titleCase } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
 import { generateOfferPdf } from '@/lib/pdf';
 import { OfferFormModal, type Offer } from './OfferForm';
+import { useOfferTemplates } from './OfferTemplates';
 
 interface Approval { id: string; action: string; comments: string | null; actor_id: string | null; created_at: string }
 
@@ -22,6 +23,7 @@ export function OfferDetail() {
   const q = useList<Offer>({ table: 'v_offers', filters: [{ column: 'id', op: 'eq', value: id }], count: false });
   const history = useList<Approval>({ table: 'offer_approvals', filters: [{ column: 'offer_id', op: 'eq', value: id }], order: [{ column: 'created_at', ascending: false }] });
   const members = useList<{ user_id: string; full_name: string | null; email: string }>(companyId ? { table: 'v_members', columns: 'user_id,full_name,email', filters: [{ column: 'company_id', op: 'eq', value: companyId }], range: [0, 999], count: false } : null);
+  const templates = useOfferTemplates(false);
   const [editing, setEditing] = useState(false);
   const [deciding, setDeciding] = useState<boolean | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -35,6 +37,7 @@ export function OfferDetail() {
     basic_monthly: o!.basic_monthly, hra_monthly: o!.hra_monthly, allowances_monthly: o!.allowances_monthly, joining_date: o!.joining_date,
     expiry_date: o!.expiry_date, probation_months: o!.probation_months, additional_terms: o!.additional_terms, issued_at: o!.sent_at ?? new Date().toISOString(),
     candidate_signature: o!.candidate_signature, responded_at: o!.responded_at, company: company!,
+    template: (() => { const tl = templates.data?.rows ?? []; return tl.find((t) => t.id === o!.template_id) ?? tl.find((t) => t.is_default) ?? null; })(),
   });
 
   const submit = useAction(() => api.db.rpc<string>('submit_offer_for_approval', { p_offer: id }), { success: (s) => (s === 'approved' ? 'Offer approved (approval not required)' : 'Submitted for approval') });

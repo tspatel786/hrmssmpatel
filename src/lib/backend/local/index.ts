@@ -6,7 +6,7 @@
 //   - email: queued emails are "delivered" by a mock worker (status=sent, provider=mock)
 import { PGlite } from '@electric-sql/pglite';
 import { BackendError, type AuthApi, type AuthUser, type Backend, type RealtimeApi, type StorageApi } from '../types';
-import { LocalDb, runAs, type Claims } from './localDb';
+import { LocalDb, runAs, setDeferSync, type Claims } from './localDb';
 
 const shimSql = import.meta.glob('../../../../supabase/local/shim.sql', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const migrationFiles = import.meta.glob('../../../../supabase/migrations/*.sql', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -188,6 +188,8 @@ function createLocalStorage(pg: PGlite, claims: () => Claims): StorageApi {
 export async function deliverQueuedEmails(pg: PGlite): Promise<number> {
   const svc: Claims = { role: 'service_role' };
   let total = 0;
+  // interview reminders (24 h ahead) are queued by the same worker run, like the Supabase edge function does
+  await runAs(pg, svc, (tx) => tx.query('select public.send_interview_reminders()')).catch(() => undefined);
   for (let i = 0; i < 20; i++) {
     const batch = await runAs(pg, svc, async (tx) => (await tx.query<{ id: string }>('select id from public.claim_email_batch(50)')).rows);
     if (!batch.length) break;
@@ -214,8 +216,14 @@ export async function createLocalBackend(opts: LocalBackendOptions = {}): Promis
   const fresh = await migrate(pg);
   if (fresh && opts.seed !== false) {
     const { seedDemoData } = await import('./seed');
-    await seedDemoData(pg);
-    await deliverQueuedEmails(pg);
+    setDeferSync(true);
+    try {
+      await seedDemoData(pg);
+      await deliverQueuedEmails(pg);
+    } finally {
+      setDeferSync(false);
+    }
+    await pg.syncToFs(); // persist the whole seed in one flush
   }
   const auth = createLocalAuth(pg, () => undefined);
   const claims = (): Claims => {

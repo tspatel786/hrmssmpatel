@@ -1,14 +1,15 @@
 import { format, startOfMonth } from 'date-fns';
 import clsx from 'clsx';
-import { BarChart3, Briefcase, CalendarCheck, Download, FileSignature, Plane, Printer, Users, Wallet } from 'lucide-react';
+import { BarChart3, Briefcase, CalendarCheck, Download, FileDown, FileSignature, Plane, Printer, Users, Wallet } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button, Card, EmptyState, ErrorState, Field, Input, PageHeader, PageLoader, Select } from '@/components/ui';
 import { useCompany } from '@/contexts/session';
 import { api } from '@/lib/backend';
-import { downloadCsv } from '@/lib/csv';
-import { fmtDate, fmtMoney, monthName, titleCase } from '@/lib/format';
+import { downloadBlob, downloadCsv } from '@/lib/csv';
+import { fmtDate, fmtMoney, fmtMoneyPlain, monthName, titleCase } from '@/lib/format';
+import { generateReportPdf } from '@/lib/pdf';
 import { fetchAll, useList } from '@/lib/hooks';
 
 type Row = Record<string, unknown>;
@@ -68,9 +69,25 @@ export function Reports() {
     toast.success(`Exported ${rows.length} rows`);
   };
 
+  const exportPdf = () => {
+    // PDF fonts have no rupee glyph: money uses the plain "INR 1,23,456" form
+    const cell = (k: string, v: unknown) => (active.money?.includes(k) && v != null && v !== '' ? fmtMoneyPlain(Number(v), company?.currency ?? 'INR') : fmt(k, v));
+    const summable = (c: string) => c in totals && !/days$|_pct$|avg_/.test(c);
+    const subtitle = active.params.includes('range') ? `${fmtDate(applied.from)} – ${fmtDate(applied.to)}` : active.params.includes('year') ? `Year ${applied.year}`
+      : active.params.includes('run') ? (runs.data?.rows ?? []).filter((r) => r.id === applied.run).map((r) => `${monthName(r.period_month)} ${r.period_year}`)[0] : undefined;
+    const blob = generateReportPdf({
+      title: active.title, subtitle, columns: cols.map(titleCase), rows: rows.map((r) => cols.map((c) => cell(c, r[c]))),
+      numeric: cols.map((c) => rows.every((r) => typeof r[c] === 'number' || r[c] == null)),
+      totals: Object.keys(totals).length > 0 && rows.length > 1 ? cols.map((c, i) => (i === 0 ? 'Total' : summable(c) ? cell(c, Math.round(totals[c] * 100) / 100) : '')) : null,
+      company: { ...(company ?? { name: 'Company' }), name: company?.name ?? 'Company' },
+    });
+    downloadBlob(`${active.key}-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`, blob);
+    toast.success('PDF downloaded');
+  };
+
   return (
     <>
-      <PageHeader title="Reports" description="Operational reports with CSV export and print." />
+      <PageHeader title="Reports" description="Operational reports with CSV and PDF export and print." />
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <nav className="no-print space-y-1" aria-label="Reports">
           {visible.map((r) => (
@@ -84,6 +101,7 @@ export function Reports() {
         <Card title={active.title} padded={false} actions={<div className="no-print flex gap-2">
           <Button size="sm" variant="secondary" icon={<Printer className="h-4 w-4" />} onClick={() => window.print()} disabled={!rows.length}>Print</Button>
           <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportCsv} disabled={!rows.length}>Export CSV</Button>
+          <Button size="sm" variant="secondary" icon={<FileDown className="h-4 w-4" />} onClick={exportPdf} disabled={!rows.length}>Export PDF</Button>
         </div>}>
           {active.params.length > 0 && (
             <form className="no-print flex flex-wrap items-end gap-3 border-b border-slate-100 p-4" onSubmit={(e) => { e.preventDefault(); if (params.from > params.to) { toast.error('From date must be before To date'); return; } setApplied(params); }}>

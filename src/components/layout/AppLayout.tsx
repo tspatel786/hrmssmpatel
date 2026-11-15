@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import {
   BarChart3, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileSignature, FileText,
   KanbanSquare, LayoutDashboard, LogOut, Mail, Menu, Network, Plane, Settings, ShieldCheck, UserCheck, UserCircle, Users,
-  UsersRound, Wallet, X, History, Crown, Check, MessagesSquare,
+  UsersRound, Wallet, X, History, Crown, Check, MessagesSquare, Moon, Monitor, Sun,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -12,7 +12,21 @@ import { api } from '@/lib/backend';
 import { config } from '@/lib/config';
 import { fmtRelative } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
+import { useTheme, type ThemePref } from '@/lib/theme';
 import { Avatar, Badge, PageLoader } from '../ui';
+
+const NEXT_THEME: Record<ThemePref, ThemePref> = { light: 'dark', dark: 'system', system: 'light' };
+const THEME_LABEL: Record<ThemePref, string> = { light: 'Light theme', dark: 'Dark theme', system: 'System theme' };
+function ThemeToggle() {
+  const { pref, setPref } = useTheme();
+  const Icon = pref === 'dark' ? Moon : pref === 'system' ? Monitor : Sun;
+  return (
+    <button type="button" className="btn-ghost p-2" onClick={() => setPref(NEXT_THEME[pref])}
+      aria-label={`${THEME_LABEL[pref]} (switch to ${THEME_LABEL[NEXT_THEME[pref]].toLowerCase()})`} title={`${THEME_LABEL[pref]} — click to change`} data-testid="theme-toggle">
+      <Icon className="h-5 w-5" />
+    </button>
+  );
+}
 
 interface NavItem {
   to: string;
@@ -310,6 +324,7 @@ export function AppLayout() {
             {company?.careers_enabled && (
               <a href={`/careers/${company.slug}`} target="_blank" rel="noreferrer" className="btn-ghost hidden text-xs sm:inline-flex">Careers page ↗</a>
             )}
+            <ThemeToggle />
             <NotificationBell />
             <UserMenu />
           </div>

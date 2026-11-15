@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Bell, BellOff, Download, FileText, Hash, Megaphone, MessageSquarePlus, MessagesSquare, Paperclip, Pin, Search, Settings2, UserMinus, UserPlus, Users, Volume2, X } from 'lucide-react';
+import { Bell, BellOff, Camera, Download, FileText, Hash, Megaphone, MessageSquarePlus, MessagesSquare, Paperclip, Pin, Search, Settings2, UserMinus, UserPlus, Users, Volume2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -13,7 +13,7 @@ import { downloadBlob } from '@/lib/csv';
 import { fileSize, fmtDate, fmtRelative } from '@/lib/format';
 import { useDebounced } from '@/lib/hooks';
 import { Announcements } from './Announcements';
-import { ChatWindow, type DirectoryEntry, type Msg } from './ChatWindow';
+import { ChatWindow, useConversationImage, type DirectoryEntry, type Msg } from './ChatWindow';
 
 type View = 'all' | 'direct' | 'groups' | 'unread' | 'files' | 'announcements';
 const VIEWS: { value: View; label: string; icon: React.ReactNode }[] = [
@@ -42,7 +42,7 @@ function useDirectory() {
     queryKey: ['chat-directory', companyId],
     enabled: !!companyId,
     queryFn: () => api.db.list<DirectoryEntry>({ table: 'v_chat_directory', filters: [{ column: 'company_id', op: 'eq', value: companyId }], order: [{ column: 'full_name' }], range: [0, 4999], count: false }),
-    refetchInterval: 60_000,
+    refetchInterval: 30_000, // presence is heartbeat-based (30 s)
   });
   const rows = useMemo(() => q.data?.rows ?? [], [q.data]);
   const map = useMemo(() => new Map(rows.map((r) => [r.user_id, r])), [rows]);
@@ -61,7 +61,7 @@ function PeoplePicker({ people, selected, onToggle, single }: { people: Director
         {list.map((p) => (
           <li key={p.user_id}>
             <button type="button" onClick={() => onToggle(p.user_id)} className={clsx('flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50', selected.includes(p.user_id) && 'bg-brand-50')}>
-              <span className="relative"><Avatar name={p.full_name} size="sm" /><span className={clsx('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white', isOnline(p.last_seen_at) ? 'bg-emerald-500' : 'bg-slate-300')} /></span>
+              <span className="relative"><Avatar name={p.full_name} size="sm" /><span className={clsx('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white', isOnline(p.last_seen_at, p.presence_status) ? 'bg-emerald-500' : 'bg-slate-300')} /></span>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{p.full_name}</span>
                 <span className="block truncate text-xs text-slate-500">{[p.designation_title ?? p.role_name, p.department_name, p.employee_code].filter(Boolean).join(' · ')}</span></span>
               {!single && selected.includes(p.user_id) && <Badge tone="blue">Added</Badge>}
@@ -162,6 +162,20 @@ function Details({ conversation, directory, onClose }: { conversation: ChatConve
   const isAdmin = conversation.my_role === 'admin';
   const run = async (fn: () => Promise<unknown>, ok: string) => { try { await fn(); toast.success(ok); refresh(); void parts.refetch(); } catch (e) { toast.error((e as Error).message); } };
   const other = conversation.other_user_id ? directory.get(conversation.other_user_id) : undefined;
+  const { companyId } = useCompany();
+  const groupImage = useConversationImage(conversation.image_url);
+  const [uploading, setUploading] = useState(false);
+  const setPhoto = async (f: File | undefined) => {
+    if (!f) return;
+    if (!/^image\/(png|jpeg|gif|webp)$/.test(f.type)) return toast.error('Use a PNG, JPG, GIF or WebP image');
+    if (f.size > 5 * 1024 * 1024) return toast.error('Group photo must be 5 MB or smaller');
+    setUploading(true);
+    try {
+      const path = `${companyId}/${conversation.id}/${crypto.randomUUID()}/group-photo.${f.type.split('/')[1]}`;
+      await api.storage.upload('chat-attachments', path, f, f.type);
+      await run(() => api.db.rpc('chat_update_group', { p_conversation: conversation.id, p_name: conversation.name, p_description: conversation.description ?? '', p_image_url: path }), 'Group photo updated');
+    } catch (e) { toast.error((e as Error).message); } finally { setUploading(false); }
+  };
   const memberIds = (parts.data?.rows ?? []).map((p) => p.user_id);
   return (
     <div className="space-y-6">
@@ -170,7 +184,7 @@ function Details({ conversation, directory, onClose }: { conversation: ChatConve
           <Avatar name={other.full_name} size="lg" />
           <p className="mt-2 font-semibold">{other.full_name}</p>
           <p className="text-sm text-slate-500">{other.designation_title ?? other.role_name}</p>
-          <Badge tone={isOnline(other.last_seen_at) ? 'green' : 'gray'} dot className="mt-2">{isOnline(other.last_seen_at) ? 'Online' : other.last_seen_at ? `Seen ${fmtRelative(other.last_seen_at)}` : 'Offline'}</Badge>
+          <Badge tone={isOnline(other.last_seen_at, other.presence_status) ? 'green' : 'gray'} dot className="mt-2">{isOnline(other.last_seen_at, other.presence_status) ? 'Online' : other.last_seen_at ? `Seen ${fmtRelative(other.last_seen_at)}` : 'Offline'}</Badge>
           <div className="mt-4 text-left"><DescriptionList cols={1} items={[{ label: 'Email', value: other.email }, { label: 'Department', value: other.department_name }, { label: 'Employee ID', value: other.employee_code }, { label: 'Role', value: other.role_name }]} /></div>
         </div>
       ) : (
@@ -179,10 +193,20 @@ function Details({ conversation, directory, onClose }: { conversation: ChatConve
             <div className="space-y-2">
               <Input value={name} onChange={(e) => setName(e.target.value)} aria-label="Group name" />
               <Textarea rows={2} value={desc} onChange={(e) => setDesc(e.target.value)} aria-label="Group description" />
-              <div className="flex gap-2"><Button size="sm" onClick={() => run(() => api.db.rpc('chat_update_group', { p_conversation: conversation.id, p_name: name, p_description: desc, p_image_url: null }), 'Group updated').then(() => setEditing(false))}>Save</Button><Button size="sm" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button></div>
+              <div className="flex gap-2"><Button size="sm" onClick={() => run(() => api.db.rpc('chat_update_group', { p_conversation: conversation.id, p_name: name, p_description: desc, p_image_url: conversation.image_url }), 'Group updated').then(() => setEditing(false))}>Save</Button><Button size="sm" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button></div>
             </div>
           ) : (
             <>
+              <div className="mb-3 flex items-center gap-3">
+                {groupImage ? <img src={groupImage} alt="" className="h-14 w-14 rounded-xl object-cover" /> : <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-violet-100 text-violet-700"><Hash className="h-6 w-6" /></span>}
+                {isAdmin && (
+                  <label className="btn-secondary cursor-pointer px-3 py-1.5 text-xs">
+                    {uploading ? <Spinner className="h-4 w-4" /> : <Camera className="h-4 w-4" />} {groupImage ? 'Change photo' : 'Add photo'}
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="sr-only" aria-label="Group photo" disabled={uploading}
+                      onChange={(e) => { void setPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+                  </label>
+                )}
+              </div>
               <p className="flex items-center gap-2 font-semibold"><Hash className="h-4 w-4" />{conversation.name}</p>
               <p className="mt-1 text-sm text-slate-500">{conversation.description || 'No description'}</p>
               {isAdmin && <button type="button" className="mt-1 text-xs font-medium text-brand-700 hover:underline" onClick={() => setEditing(true)}>Edit group</button>}
@@ -195,7 +219,7 @@ function Details({ conversation, directory, onClose }: { conversation: ChatConve
               const d = directory.get(p.user_id);
               return (
                 <li key={p.user_id} className="flex items-center gap-2 rounded-lg px-1 py-1 text-sm">
-                  <span className="relative"><Avatar name={d?.full_name} size="xs" /><span className={clsx('absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white', isOnline(d?.last_seen_at) ? 'bg-emerald-500' : 'bg-slate-300')} /></span>
+                  <span className="relative"><Avatar name={d?.full_name} size="xs" /><span className={clsx('absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white', isOnline(d?.last_seen_at, d?.presence_status) ? 'bg-emerald-500' : 'bg-slate-300')} /></span>
                   <span className="min-w-0 flex-1 truncate">{d?.full_name ?? 'Former member'}{p.user_id === user?.id && ' (you)'}</span>
                   {p.role === 'admin' && <Badge tone="violet">Admin</Badge>}
                   {isAdmin && p.user_id !== user?.id && (
@@ -232,6 +256,12 @@ function Details({ conversation, directory, onClose }: { conversation: ChatConve
       </Modal>
     </div>
   );
+}
+
+function GroupIcon({ imageUrl }: { imageUrl: string | null }) {
+  const src = useConversationImage(imageUrl);
+  return src ? <img src={src} alt="" className="h-9 w-9 rounded-lg object-cover" />
+    : <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Hash className="h-4 w-4" /></span>;
 }
 
 function FilesView() {
@@ -297,7 +327,7 @@ export function Communication() {
   const showConversationPane = view === 'files' || view === 'announcements' || !!active;
 
   return (
-    <div className="-mx-4 -my-6 flex h-[calc(100vh-4rem)] overflow-hidden border-slate-200 bg-slate-50 sm:-mx-6 lg:-mx-8">
+    <div className="-mx-4 -my-6 flex h-[calc(100vh-4rem)] overflow-hidden supports-[height:100dvh]:h-[calc(100dvh-4rem)] border-slate-200 bg-slate-50 sm:-mx-6 lg:-mx-8">
       {/* left panel */}
       <aside className={clsx('w-full shrink-0 flex-col border-r border-slate-200 bg-white lg:flex lg:w-80', showConversationPane ? 'hidden' : 'flex')} aria-label="Conversations">
         <div className="flex items-center gap-3 border-b border-slate-200 p-4">
@@ -333,8 +363,8 @@ export function Communication() {
                     <button type="button" onClick={() => open(c.id)} aria-current={activeId === c.id ? 'true' : undefined}
                       className={clsx('flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition', activeId === c.id ? 'bg-brand-50' : 'hover:bg-slate-50')}>
                       <span className="relative">
-                        {c.type === 'group' ? <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Hash className="h-4 w-4" /></span> : <Avatar name={c.name} size="md" />}
-                        {c.type === 'direct' && <span className={clsx('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white', isOnline(directory.map.get(c.other_user_id ?? '')?.last_seen_at ?? c.other_last_seen) ? 'bg-emerald-500' : 'bg-slate-300')} />}
+                        {c.type === 'group' ? <GroupIcon imageUrl={c.image_url} /> : <Avatar name={c.name} size="md" />}
+                        {c.type === 'direct' && <span className={clsx('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white', (() => { const d = directory.map.get(c.other_user_id ?? ''); return d ? isOnline(d.last_seen_at, d.presence_status) : isOnline(c.other_last_seen); })() ? 'bg-emerald-500' : 'bg-slate-300')} />}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center justify-between gap-2">

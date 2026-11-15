@@ -138,6 +138,9 @@ const applySchema = z.object({
   expected_ctc: z.string().optional().refine((v) => !v || Number(v) >= 0, 'Must be a positive number'),
   notice_period_days: z.string().optional().refine((v) => !v || (Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 365), '0–365 days'),
   linkedin_url: z.string().trim().url('Enter a full URL (https://…)').or(z.literal('')).optional(),
+  highest_qualification: z.string().trim().max(100).optional(),
+  institution: z.string().trim().max(150).optional(),
+  graduation_year: z.string().optional().refine((v) => !v || (/^\d{4}$/.test(v) && Number(v) >= 1950 && Number(v) <= new Date().getFullYear() + 6), 'Enter a valid year'),
   skills: z.string().max(500).optional(),
   cover_letter: z.string().max(5000, 'Max 5000 characters').optional(),
   consent: z.literal(true, { errorMap: () => ({ message: 'Please accept to continue' }) }),
@@ -152,7 +155,7 @@ export function CareersJob() {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
   const [submitError, setSubmitError] = useState('');
-  const [done, setDone] = useState<{ job_title: string } | null>(null);
+  const [done, setDone] = useState<{ job_title: string; application_id: string; reference_no?: string } | null>(null);
   const form = useForm<ApplyValues>({ resolver: zodResolver(applySchema) });
   const e = form.formState.errors;
 
@@ -182,7 +185,7 @@ export function CareersJob() {
       await api.storage.upload('resumes', path, file, mime);
       const { consent: _c, website: _w, ...data } = v;
       void _c; void _w;
-      const res = await api.db.rpc<{ job_title: string }>('public_submit_application', {
+      const res = await api.db.rpc<{ job_title: string; application_id: string; reference_no?: string }>('public_submit_application', {
         p_slug: slug, p_job: jobId, p_data: data, p_resume: { path, name: file.name, size: file.size, mime },
       });
       void api.processEmails();
@@ -200,6 +203,9 @@ export function CareersJob() {
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-8 w-8" /></span>
           <h1 className="mt-5 text-2xl font-semibold">Application submitted!</h1>
           <p className="mt-2 text-slate-600">Thank you for applying for <strong>{done.job_title}</strong> at {c.name}. A confirmation email is on its way, and our team will be in touch.</p>
+          <p className="mt-5 inline-block rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">Reference number{' '}
+            <strong className="font-mono text-slate-900" data-testid="application-ref">{done.reference_no ?? `APP-${done.application_id.replace(/-/g, '').slice(0, 8).toUpperCase()}`}</strong></p>
+          <p className="mt-2 text-xs text-slate-500">Keep this number for any questions about your application.</p>
           <Link to={`/careers/${c.slug}`} className="btn-secondary mt-8">Browse more roles</Link>
         </div>
       </CareersShell>
@@ -254,6 +260,11 @@ export function CareersJob() {
               </div>
               <Field label={`Expected CTC (${j.currency}/yr)`} error={e.expected_ctc?.message} htmlFor="ec"><Input id="ec" type="number" min={0} {...form.register('expected_ctc')} /></Field>
               <Field label="LinkedIn profile" error={e.linkedin_url?.message} htmlFor="li"><Input id="li" type="url" placeholder="https://linkedin.com/in/…" {...form.register('linkedin_url')} /></Field>
+              <Field label="Highest qualification" error={e.highest_qualification?.message} htmlFor="hq"><Input id="hq" placeholder="e.g. B.Tech Computer Science" {...form.register('highest_qualification')} /></Field>
+              <div className="grid grid-cols-[1fr_7rem] gap-3">
+                <Field label="Institution" error={e.institution?.message} htmlFor="in"><Input id="in" {...form.register('institution')} /></Field>
+                <Field label="Year" error={e.graduation_year?.message} htmlFor="gy"><Input id="gy" inputMode="numeric" maxLength={4} placeholder="2022" {...form.register('graduation_year')} /></Field>
+              </div>
               <Field label="Key skills" hint="Comma separated" htmlFor="sk"><Input id="sk" {...form.register('skills')} /></Field>
               <Field label="Resume" required error={fileError} hint="PDF or Word, max 5 MB">
                 <label className={`flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed px-4 py-4 text-sm transition ${fileError ? 'border-rose-300 bg-rose-50' : file ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>

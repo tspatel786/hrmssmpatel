@@ -13,7 +13,7 @@ import { api } from '@/lib/backend';
 import { downloadBlob } from '@/lib/csv';
 import { fileSize, fmtDate, fmtRelative, fmtTime } from '@/lib/format';
 
-export interface DirectoryEntry { user_id: string; full_name: string; email: string; role_name: string; employee_code: string | null; department_name: string | null; designation_title: string | null; last_seen_at: string | null }
+export interface DirectoryEntry { user_id: string; full_name: string; email: string; role_name: string; employee_code: string | null; department_name: string | null; designation_title: string | null; last_seen_at: string | null; presence_status?: string | null }
 interface Att { id: string; path: string; name: string; mime: string; size: number }
 export interface Msg {
   id: string; conversation_id: string; sender_id: string | null; sender_name: string | null; body: string; reply_to_id: string | null;
@@ -28,6 +28,14 @@ const QUICK = ['👍', '❤️', '😂', '🎉', '😮', '🙏'];
 const ALLOWED = /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/(plain|csv)|application\/(msword|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|vnd\.ms-excel|vnd\.ms-powerpoint|zip))$/;
 const MAX_FILE = 25 * 1024 * 1024;
 const PAGE = 40;
+
+/** Group photos live in the private chat bucket (image_url holds the storage path); resolve to a short-lived signed URL. */
+export function useConversationImage(imageUrl: string | null | undefined) {
+  const isPath = !!imageUrl && !/^https?:/.test(imageUrl);
+  const q = useQuery({ queryKey: ['chat-group-image', imageUrl], enabled: isPath, staleTime: 50 * 60_000,
+    queryFn: () => api.storage.signedUrl('chat-attachments', imageUrl!, 3600) });
+  return isPath ? q.data ?? null : imageUrl ?? null;
+}
 
 const dayLabel = (d: Date) => (isToday(d) ? 'Today' : isYesterday(d) ? 'Yesterday' : fmtDate(d, 'EEEE, dd MMM yyyy'));
 
@@ -127,8 +135,15 @@ export function ChatWindow({ conversation, directory, onBack, onToggleDetails }:
   // mark as read whenever new messages are visible
   const lastId = rows[rows.length - 1]?.id;
   useEffect(() => {
-    if (!lastId || document.visibilityState !== 'visible') return;
-    void api.db.rpc('chat_mark_read', { p_conversation: cid }).then(() => refresh()).catch(() => undefined);
+    if (!lastId) return;
+    const markRead = () => {
+      if (document.visibilityState !== 'visible') return;
+      void api.db.rpc('chat_mark_read', { p_conversation: cid }).then(() => refresh()).catch(() => undefined);
+    };
+    markRead();
+    // messages that arrived while the tab was hidden are read when the user comes back to it
+    document.addEventListener('visibilitychange', markRead);
+    return () => document.removeEventListener('visibilitychange', markRead);
   }, [lastId, cid, refresh]);
 
   useLayoutEffect(() => {
@@ -137,8 +152,21 @@ export function ChatWindow({ conversation, directory, onBack, onToggleDetails }:
   }, [rows.length, pending.length, cid]);
 
   const others = (participants.data?.rows ?? []).filter((p) => p.user_id !== user?.id);
-  const typingNames = (typing.data?.rows ?? [])
-    .filter((t) => t.user_id !== user?.id && Date.now() - new Date(t.typing_at).getTime() < 7000)
+  const typingRows = (typing.data?.rows ?? []).filter((t) => t.user_id !== user?.id && Date.now() - new Date(t.typing_at).getTime() < 7000);
+  // typing rows expire client-side (7 s) without any server event: re-render so the indicator disappears on time
+  const [, setNow] = useState(0);
+  const typingActive = typingRows.length > 0;
+  useEffect(() => {
+    if (!typingActive) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [typingActive]);
+  // stop "typing…" for others when leaving the conversation mid-draft
+  useEffect(() => () => {
+    if (Date.now() - lastTyping.current < 7000) void api.db.rpc('chat_set_typing', { p_conversation: cid, p_typing: false }).catch(() => undefined);
+    lastTyping.current = 0;
+  }, [cid]);
+  const typingNames = typingRows
     .map((t) => directory.get(t.user_id)?.full_name?.split(' ')[0] ?? 'Someone');
 
   const receipt = (m: Msg) => {
@@ -154,6 +182,9 @@ export function ChatWindow({ conversation, directory, onBack, onToggleDetails }:
     if (!editing && v.trim() && Date.now() - lastTyping.current > 3000) {
       lastTyping.current = Date.now();
       void api.db.rpc('chat_set_typing', { p_conversation: cid, p_typing: true }).catch(() => undefined);
+    } else if (!v.trim() && lastTyping.current) {
+      lastTyping.current = 0; // draft cleared → stop the indicator immediately
+      void api.db.rpc('chat_set_typing', { p_conversation: cid, p_typing: false }).catch(() => undefined);
     }
   };
 
@@ -228,15 +259,16 @@ export function ChatWindow({ conversation, directory, onBack, onToggleDetails }:
     setTimeout(() => setHighlight(null), 2500);
   };
 
+  const groupImage = useConversationImage(conversation.image_url);
   const other = conversation.other_user_id ? directory.get(conversation.other_user_id) : undefined;
-  const online = conversation.type === 'direct' && isOnline(other?.last_seen_at ?? conversation.other_last_seen);
+  const online = conversation.type === 'direct' && (other ? isOnline(other.last_seen_at, other.presence_status) : isOnline(conversation.other_last_seen));
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 px-3 sm:px-4">
         <button type="button" className="btn-ghost p-2 lg:hidden" onClick={onBack} aria-label="Back to conversations"><ArrowLeft className="h-5 w-5" /></button>
         <div className="relative">
-          <Avatar name={conversation.name} size="sm" src={conversation.image_url} />
+          <Avatar name={conversation.name} size="sm" src={groupImage} />
           {conversation.type === 'direct' && <span className={clsx('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white', online ? 'bg-emerald-500' : 'bg-slate-300')} />}
         </div>
         <div className="min-w-0 flex-1">
@@ -305,7 +337,7 @@ export function ChatWindow({ conversation, directory, onBack, onToggleDetails }:
               return (
                 <div key={m.id} id={`msg-${m.id}`}>
                   {newDay && <div className="my-4 flex items-center gap-3 text-xs font-medium text-slate-400"><span className="h-px flex-1 bg-slate-200" />{dayLabel(new Date(m.created_at))}<span className="h-px flex-1 bg-slate-200" /></div>}
-                  <div className={clsx('group relative flex gap-3 rounded-lg px-2 py-0.5 transition hover:bg-slate-50', grouped ? 'mt-0' : 'mt-3', highlight === m.id && 'bg-amber-50 ring-1 ring-amber-200')}>
+                  <div tabIndex={0} data-testid="message-row" className={clsx('group relative flex gap-3 rounded-lg px-2 py-0.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-500/30', grouped ? 'mt-0' : 'mt-3', highlight === m.id && 'bg-amber-50 ring-1 ring-amber-200')}>
                     <div className="w-9 shrink-0">{!grouped && <Avatar name={m.sender_name} size="sm" />}</div>
                     <div className="min-w-0 flex-1">
                       {!grouped && (
