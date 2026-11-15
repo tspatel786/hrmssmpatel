@@ -6,7 +6,8 @@
    The live test that invokes the worker now runs only with `LIVE_EMAIL_MODE=mock`, so test runs never mail throwaway addresses.
 2. **Supabase Auth emails** (signup confirmation, password reset) use Supabase's built-in mailer, which is rate-limited.
    Configure custom SMTP before production.
-3. **No public deployment** was performed (not authorized). Auth Site URL is `http://localhost:5173`.
+3. **Production frontend:** `main` is deployed on Render (per the project owner). The last documented Auth Site URL was
+   `http://localhost:5173`; set it and the redirect allow-list to the production domain.
 4. **Security housekeeping:** the Supabase personal access token used during setup was shared in chat — revoke it.
 
 5. **SECURITY — fixed (final audit 2026-11-15):** Supabase Realtime broadcast primary keys of deleted rows to every subscriber

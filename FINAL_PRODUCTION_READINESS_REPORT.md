@@ -6,9 +6,10 @@
 ## Verdict: **NO-GO for public launch today — no code or security blockers remain**
 
 Every critical security test passes, including live on Supabase, and every automated suite is green on an idle machine.
-The launch is blocked only by **operational items that could not be verified from this repository** (production
-hosting and domain, Auth URL configuration, backups, token revocation, email worker schedule). Once the six blocking
-items in the [deployment checklist](#production-deployment-checklist) are confirmed, the recommendation becomes **GO**.
+The frontend is already served from `main` on Render (per the project owner). Remaining blockers are **operational items
+that could not be verified from this repository** (Auth URL configuration, backups, token revocation, email, email worker
+schedule). Once the five open blocking items in the [deployment checklist](#production-deployment-checklist) are confirmed,
+the recommendation becomes **GO**.
 
 ## Test evidence (all runs on 2026-11-15)
 
@@ -122,7 +123,7 @@ Migrations 1200, 1300 and 1400 are already applied on the Supabase project. Rema
 
 | # | Item | Blocking | Status |
 |---|---|---|---|
-| 1 | Deploy the frontend from `main` to production hosting with `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_PUBLIC_APP_URL` (`DEPLOYMENT.md` §4; SPA rewrite in `vercel.json`) | Yes | Not done; no deployment made from this repository |
+| 1 | Frontend served from `main` in production with `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_PUBLIC_APP_URL`; SPA rewrite of all routes to `/index.html` | Yes | **Done per owner: Render deploys `main`.** Confirm the env vars and the SPA rewrite on Render (deep links such as `/careers/<slug>` must load) |
 | 2 | Set Supabase Auth **Site URL** and redirect allow-list to the production domain (last documented value: `http://localhost:5173`) | Yes | Not verified (no management access) |
 | 3 | Confirm a recent database backup exists (Dashboard → Database → Backups) and record the frontend build being replaced | Yes | Not verified |
 | 4 | Revoke the Supabase personal access token shared in chat during setup | Yes | Not verified |
@@ -134,9 +135,9 @@ Migrations 1200, 1300 and 1400 are already applied on the Supabase project. Rema
 
 ## Remaining risks
 
-1. **Unverified operational configuration** (checklist items 1–6). Each is a launch blocker until confirmed.
-2. **Deployment order history:** migrations 1200–1400 were applied outside this repository. If a pre-1200 frontend build was
-   live at the time, its chat realtime would have stopped; deploying the current `main` frontend resolves that.
+1. **Unverified operational configuration** (checklist items 2–6). Each is a launch blocker until confirmed.
+2. **Deployment order history:** migrations 1200–1400 were applied outside this repository. If Render was still serving a
+   pre-1200 build at that moment, chat realtime would have paused until `main` (with the per-table Realtime client) deployed.
 3. **CI confirmation of the E2E fix:** verified locally (9 / 9 over 3 runs, idle machine); CI on this branch runs after push.
 4. **Payroll statutory model** is simplified; have payroll outputs checked by your accountant before the first real run.
 5. **Demo first-launch freeze** affects only the demo, but it is the first thing prospects see.
