@@ -46,6 +46,14 @@ dark mode, group photo upload in chat.
   realtime between users are verified in Supabase mode instead). First launch takes ~50 s on a typical laptop to create and seed the database (measured in headless Chromium).
 - Password reset is unavailable in demo mode (no email).
 
+## Testing environment
+- **Demo E2E could not be completed on 2026-11-15:** every failing demo test timed out while the in-browser database was
+  booting (> 120 s), including a control run of the pre-branch commit `cbf2caa`, on a heavily loaded machine. The same boot
+  path completes in 16 s in Node. Re-run `npx playwright test` on an idle machine/CI before merging.
+- The E2E console filter for sandboxed email previews (`Blocked script execution in 'about:srcdoc'`) is **not** in this branch
+  (it was pre-existing local work, kept on `local/preexisting-wip`); `e2e/lifecycle.spec.ts` may report that console message
+  as an error until it is merged.
+
 ## Tooling
 - **Dependency advisories (runtime, `npm audit --omit=dev`):** jsPDF/DOMPurify (critical/high), supabase auth-js (low) and the
   patchable React Router issues were fixed by upgrading (jsPDF 4.2.1, supabase-js 2.109, react-router-dom 6.30.6). Remaining:

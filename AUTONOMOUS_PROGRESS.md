@@ -15,8 +15,8 @@ Last updated: 2026-11-15
   calendar, candidate bulk tag/stage/reject/export, 24 h interview reminders (worker + pg_cron), multiple offer-letter
   templates, careers education fields + reference number, branded PDF report export, light/dark/system theme.
   New tests: `tests/db/hr_gaps.test.ts` (10), `tests/db/recruitment_gaps.test.ts` (9), `tests/unit/pdf.test.ts` (3), `e2e/gaps.spec.ts` (3).
-- Uncommitted work found at start and preserved: demo seed single-flush (`setDeferSync`), optimistic onboarding checkboxes,
-  E2E console filter for sandboxed email previews.
+- Uncommitted work found at start (demo seed single flush, optimistic onboarding checkboxes, E2E console filter) was
+  kept out of the PR and saved on the local branch `local/preexisting-wip` (not pushed).
 
 ## Pending (needs you)
 - Apply migrations 1200, 1300 and 1400 to Supabase (`npm run db:apply` with a fresh access token), redeploy the
