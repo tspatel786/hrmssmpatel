@@ -35,10 +35,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
 
+  // queue interview reminders due in the next 24 h first (no-op if migration 1400 is not applied yet)
+  const { data: reminders } = await admin.rpc('send_interview_reminders');
   const { data: batch, error } = await admin.rpc('claim_email_batch', { p_limit: 25 });
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-  const result = { processed: 0, sent: 0, failed: 0, mode: MODE };
+  const result = { processed: 0, sent: 0, failed: 0, mode: MODE, reminders: Number(reminders ?? 0) };
   for (const e of (batch ?? []) as EmailRow[]) {
     result.processed++;
     try {

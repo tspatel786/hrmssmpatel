@@ -9,6 +9,7 @@ import { api } from '@/lib/backend';
 import { STAGES, stageInfo } from '@/lib/constants';
 import { fmtDate, fmtMoney, fmtRelative, titleCase } from '@/lib/format';
 import { useAction, useList, useTable } from '@/lib/hooks';
+import { BulkApplicationActions } from './BulkActions';
 import { AddCandidateModal, type Application } from './Candidates';
 import { JobForm, type Job } from './JobForm';
 
@@ -66,6 +67,7 @@ export function JobDetail() {
               {can('candidates.manage') && job.status !== 'closed' && <Button size="sm" variant="secondary" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add candidate</Button>}
             </div>
             <DataTable table={table} columns={columns} searchPlaceholder="Search applicants" onRowClick={(a) => navigate(`/app/recruitment/candidates/${a.candidate_id}`)}
+              bulkActions={can('candidates.manage') ? (sel, clear) => <BulkApplicationActions selected={sel} clear={clear} /> : undefined}
               filters={[{ key: 'stage', label: 'Stages', options: STAGES.map((s) => ({ value: s.value, label: s.label })) }]}
               empty={{ title: 'No applicants yet', description: job.status === 'published' ? 'Share the careers link to start receiving applications.' : 'Publish this job to start receiving applications.' }} />
           </div>

@@ -41,3 +41,17 @@ Every foreign-key lookup used by RLS or list pages is indexed (e.g. `company_mem
 `applications(company_id, stage)`, `interviews(company_id, scheduled_at)`, `chat_messages(conversation_id, created_at desc)`,
 `email_logs(status, created_at) where status in ('queued','failed')`). Unique constraints enforce one live offer per
 application, one DM per user pair, idempotent chat sends, unique employee codes/emails per company.
+
+## Additions (migrations 1200–1400, 2026-11-15)
+
+| Object | Purpose |
+|---|---|
+| `attendance_records.is_late / late_minutes / is_early_exit / early_exit_minutes` | Set by trigger `attendance_set_flags` from `companies.work_start/work_end/late_grace_minutes` in the company time zone |
+| `attendance_corrections` (+ `v_attendance_corrections`) | Employee correction requests; RPCs `request_attendance_correction`, `decide_attendance_correction` (manager or `attendance.manage`, never self), `cancel_attendance_correction`; one pending request per employee/day; blocked once payroll for the month is processed |
+| `team_leave_calendar(company, from, to, department)` | Privacy-scoped leave calendar (no reasons): HR/approvers see the company, others their department's approved leave, reports and own requests |
+| `bulk_change_application_stage`, `bulk_tag_candidates` | Bulk recruitment actions reusing the single-item rules; per-item failures returned |
+| `interviews.reminder_sent_at`, `send_interview_reminders()` | 24 h reminders to candidate + panel (template `interview_reminder`), re-armed on reschedule; run by the email worker and pg_cron (if enabled) |
+| `offer_templates`, `offers.template_id` | Multiple offer-letter templates (title, intro, terms, closing with placeholders), one default per company |
+| `candidates.highest_qualification / institution / graduation_year`, `application_ref(uuid)` | Careers education fields; `APP-XXXXXXXX` reference returned by `public_submit_application` |
+| `v_chat_directory.presence_status`, `chat_storage_path_ok()` | Presence status; chat storage path must match the conversation's company |
+| Realtime | `chat_reactions` / `chat_participants` left the `supabase_realtime` publication; their changes touch `chat_conversations` (RLS-checked) so DELETE events no longer leak IDs across companies |

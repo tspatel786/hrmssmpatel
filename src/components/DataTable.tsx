@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Download, FilterX } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { downloadCsv } from '@/lib/csv';
 import { fetchAll, type useTable } from '@/lib/hooks';
@@ -33,7 +33,7 @@ export interface FilterDef {
 type TableApi = ReturnType<typeof useTable>;
 
 export function DataTable<T extends { id?: string | number }>({
-  table, columns, filters = [], searchPlaceholder, onRowClick, empty, toolbar, exportName, rowActions, mobileCard,
+  table, columns, filters = [], searchPlaceholder, onRowClick, empty, toolbar, exportName, rowActions, mobileCard, bulkActions,
 }: {
   table: TableApi;
   columns: Column<T>[];
@@ -45,8 +45,26 @@ export function DataTable<T extends { id?: string | number }>({
   exportName?: string;
   rowActions?: (row: T) => ReactNode;
   mobileCard?: (row: T) => ReactNode;
+  /** Enables row checkboxes; rendered in a bar when at least one row is selected. Selection is per page. */
+  bulkActions?: (selected: T[], clear: () => void) => ReactNode;
 }) {
   const rows = table.rows as T[];
+  const [selected, setSelected] = useState<Set<string | number>>(new Set());
+  const queryKey = JSON.stringify(table.query ?? null);
+  useEffect(() => setSelected(new Set()), [queryKey]);
+  const selectable = !!bulkActions;
+  const selectedRows = rows.filter((r) => r.id !== undefined && selected.has(r.id));
+  const allOnPage = rows.length > 0 && rows.every((r) => r.id !== undefined && selected.has(r.id));
+  const toggle = (id: string | number | undefined) => {
+    if (id === undefined) return;
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+  const toggleAll = () => setSelected(allOnPage ? new Set() : new Set(rows.map((r) => r.id).filter((x): x is string | number => x !== undefined)));
+  const clear = () => setSelected(new Set());
+  const checkbox = (r: T) => (
+    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" checked={r.id !== undefined && selected.has(r.id)}
+      onChange={() => toggle(r.id)} onClick={(e) => e.stopPropagation()} aria-label="Select row" />
+  );
   const { isLoading, isError, error, refetch, isFetching } = table.result;
 
   const doExport = async () => {
@@ -84,6 +102,13 @@ export function DataTable<T extends { id?: string | number }>({
         </div>
       </div>
 
+      {selectable && selectedRows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-brand-100 bg-brand-50 px-4 py-2.5" role="region" aria-label="Bulk actions">
+          <span className="text-sm font-medium text-brand-800">{selectedRows.length} selected</span>
+          <div className="flex flex-wrap items-center gap-2">{bulkActions!(selectedRows, clear)}</div>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={clear}>Clear selection</Button>
+        </div>
+      )}
       {isError ? (
         <ErrorState error={error} onRetry={() => refetch()} />
       ) : isLoading ? (
@@ -100,8 +125,9 @@ export function DataTable<T extends { id?: string | number }>({
           {mobileCard && (
             <ul className="divide-y divide-slate-100 md:hidden">
               {rows.map((r, i) => (
-                <li key={r.id ?? i} className={clsx('p-4', onRowClick && 'cursor-pointer active:bg-slate-50')} onClick={() => onRowClick?.(r)}>
-                  {mobileCard(r)}
+                <li key={r.id ?? i} className={clsx('p-4', onRowClick && 'cursor-pointer active:bg-slate-50', selectable && 'flex items-center gap-3')} onClick={() => onRowClick?.(r)}>
+                  {selectable && checkbox(r)}
+                  {selectable ? <div className="min-w-0 flex-1">{mobileCard(r)}</div> : mobileCard(r)}
                 </li>
               ))}
             </ul>
@@ -110,6 +136,11 @@ export function DataTable<T extends { id?: string | number }>({
             <table className="table">
               <thead>
                 <tr>
+                  {selectable && (
+                    <th className="w-px" scope="col">
+                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" checked={allOnPage} onChange={toggleAll} aria-label="Select all on this page" />
+                    </th>
+                  )}
                   {columns.map((c) => (
                     <th key={c.key} className={clsx(c.className, c.hideOnMobile && 'hidden lg:table-cell')} scope="col"
                       aria-sort={table.sort.column === c.key ? (table.sort.ascending ? 'ascending' : 'descending') : undefined}>
@@ -126,7 +157,8 @@ export function DataTable<T extends { id?: string | number }>({
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={r.id ?? i} className={clsx(onRowClick && 'cursor-pointer')} onClick={() => onRowClick?.(r)}>
+                  <tr key={r.id ?? i} className={clsx(onRowClick && 'cursor-pointer', r.id !== undefined && selected.has(r.id) && 'bg-brand-50/50')} onClick={() => onRowClick?.(r)}>
+                    {selectable && <td className="w-px" onClick={(e) => e.stopPropagation()}>{checkbox(r)}</td>}
                     {columns.map((c) => (
                       <td key={c.key} className={clsx(c.className, c.hideOnMobile && 'hidden lg:table-cell')}>
                         {c.render ? c.render(r) : String((r as Record<string, unknown>)[c.key] ?? '—')}

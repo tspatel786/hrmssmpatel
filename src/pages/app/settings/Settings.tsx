@@ -13,7 +13,7 @@ import { opts } from '@/lib/constants';
 import { fmtDate } from '@/lib/format';
 import { useAction, useList, useTable } from '@/lib/hooks';
 import { useRoles } from '@/lib/lookups';
-import { optEmail, optStr, optUrl, reqNum, reqStr } from '@/lib/schemas';
+import { optEmail, optNum, optStr, optUrl, reqNum, reqStr } from '@/lib/schemas';
 
 // ---------------- company profile & policies ----------------
 const companySchema = z.object({
@@ -22,7 +22,7 @@ const companySchema = z.object({
   timezone: z.string().min(1), currency: z.string().length(3),
   primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex color'), careers_enabled: z.boolean(), careers_tagline: optStr(160), careers_about: optStr(2000),
   employee_code_prefix: z.string().trim().regex(/^[A-Z0-9]{2,8}$/, '2–8 uppercase letters/numbers'), offer_approval_required: z.boolean(),
-  offer_validity_days: reqNum(1, 90, 'Required'), work_start: z.string().min(4), work_end: z.string().min(4),
+  offer_validity_days: reqNum(1, 90, 'Required'), work_start: z.string().min(4), work_end: z.string().min(4), late_grace_minutes: optNum(240).optional(),
   pf_enabled: z.boolean(), pf_percent: reqNum(0, 50, 'Required'), professional_tax: reqNum(0, 100000, 'Required'), tds_percent: reqNum(0, 50, 'Required'),
   email_from_name: optStr(80), email_reply_to: optEmail,
 }).refine((v) => v.work_end > v.work_start, { message: 'End must be after start', path: ['work_end'] });
@@ -43,7 +43,10 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
   }, [company]);
   const save = useAction(async (v: CompanyValues) => {
     if (!days.length) throw new Error('Select at least one working day');
-    await api.db.update('companies', companyId!, { ...clean(v as Record<string, unknown>), working_days: days });
+    const data: Record<string, unknown> = { ...clean(v as Record<string, unknown>), working_days: days };
+    // column added by migration 1300: never send it to a database that does not have it yet
+    if (!company || !('late_grace_minutes' in company) || data.late_grace_minutes == null) delete data.late_grace_minutes;
+    await api.db.update('companies', companyId!, data);
     await refresh();
   }, { success: 'Settings saved', silent: true });
   const logo = useAction(async (f: File) => {
@@ -75,6 +78,7 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
       { name: 'offer_validity_days', label: 'Default offer validity (days)', type: 'number', required: true },
       { name: 'offer_approval_required', label: 'Offers require approval before sending', type: 'checkbox', span: 2 },
       { name: 'work_start', label: 'Work day starts', type: 'time', required: true }, { name: 'work_end', label: 'Work day ends', type: 'time', required: true },
+      { name: 'late_grace_minutes', label: 'Late / early grace (minutes)', type: 'number', hidden: !('late_grace_minutes' in company), hint: 'Arrivals after start + grace are flagged late; departures before end minus grace are flagged early' },
       { name: 'pf_enabled', label: 'Deduct provident fund (PF)', type: 'checkbox', span: 2 },
       { name: 'pf_percent', label: 'PF % of basic', type: 'number', step: '0.01' }, { name: 'professional_tax', label: 'Professional tax / month', type: 'number' },
       { name: 'tds_percent', label: 'Flat TDS % of gross', type: 'number', step: '0.01', hint: 'Simplified withholding; use 0 to disable' },

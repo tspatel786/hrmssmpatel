@@ -3,7 +3,7 @@
 // Users are created with the admin API (pre-confirmed, no emails) and deleted afterwards.
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -167,4 +167,164 @@ test('real-time direct & group messaging with sound, receipts, files, search, mu
   expect(errors, errors.join('\n')).toEqual([]);
   await ctxA.close();
   await ctxB.close();
+});
+
+// Browser Notification stub: records notifications and reports permission "granted" (headless Chrome cannot show real ones).
+const notificationStub = () => {
+  const w = window as unknown as { __notes: { title: string; body?: string }[]; Notification: unknown };
+  w.__notes = [];
+  class FakeNotification {
+    static permission = 'granted';
+    static requestPermission = () => Promise.resolve('granted');
+    onclick: (() => void) | null = null;
+    constructor(title: string, opts?: { body?: string }) { w.__notes.push({ title, body: opts?.body }); }
+    close() { /* noop */ }
+  }
+  w.Notification = FakeNotification;
+};
+
+test('typing, presence, reactions, pins, browser notifications, announcements and UI isolation', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const ctxA = await browser.newContext();
+  const ctxB = await browser.newContext();
+  await ctxB.addInitScript(notificationStub);
+  const a = await ctxA.newPage();
+  const b = await ctxB.newPage();
+  const errors: string[] = [];
+  for (const p of [a, b]) p.on('pageerror', (e) => errors.push(e.message));
+  await uiLogin(a, A.email);
+  await uiLogin(b, B.email);
+  const { data: dm } = await A.sb.from('chat_conversations').select('id').eq('type', 'direct').single();
+  await a.goto(`/app/communication?c=${dm!.id}`);
+  await b.goto(`/app/communication?c=${dm!.id}`);
+  await b.mouse.click(5, 5);
+  const msgA = a.getByLabel('Message', { exact: true });
+  const chatHeaderA = a.locator('header').filter({ has: a.getByRole('heading', { name: 'Ben Builder' }) });
+
+  // presence: B is active → A sees "Online"
+  await expect(chatHeaderA.getByText('Online', { exact: true })).toBeVisible({ timeout: 45_000 });
+
+  // typing indicator appears, and disappears when the draft is cleared
+  await msgA.fill('hel');
+  await expect(b.getByText(/Anna is typing…/)).toBeVisible({ timeout: 15_000 });
+  await msgA.fill('');
+  await expect(b.getByText(/Anna is typing…/)).toBeHidden({ timeout: 15_000 });
+  // and it expires on its own when the typist simply stops (no further events)
+  await msgA.fill('still thinking');
+  await expect(b.getByText(/Anna is typing…/)).toBeVisible({ timeout: 15_000 });
+  await expect(b.getByText(/Anna is typing…/)).toBeHidden({ timeout: 15_000 });
+
+  // reactions: B reacts in the UI → A sees the count in real time
+  await msgA.fill('react to this please');
+  await msgA.press('Enter');
+  const rowB = b.getByTestId('message-row').filter({ hasText: 'react to this please' });
+  await expect(rowB).toBeVisible({ timeout: 20_000 });
+  await rowB.hover();
+  await rowB.getByRole('button', { name: 'Add reaction' }).click();
+  await b.getByRole('button', { name: 'React 👍' }).click();
+  await expect(a.getByTestId('message-pane').getByRole('button', { name: '👍 1' })).toBeVisible({ timeout: 20_000 });
+
+  // pins: B pins the message → it appears in A's "Pinned messages" panel
+  await rowB.hover();
+  await rowB.getByRole('button', { name: 'Pin message' }).click();
+  await a.getByRole('button', { name: 'Conversation details' }).click();
+  const details = a.getByRole('complementary', { name: 'Conversation details' });
+  await expect(details.getByText('react to this please')).toBeVisible({ timeout: 20_000 });
+
+  // browser notifications: B enables them, leaves the chat, tab loses focus → A's message produces a notification
+  await b.getByRole('button', { name: 'Notification settings' }).click();
+  await b.getByRole('switch', { name: 'Browser notifications' }).click();
+  await expect(b.getByRole('switch', { name: 'Browser notifications' })).toHaveAttribute('aria-checked', 'true');
+  await b.getByRole('button', { name: 'Done' }).click();
+  await b.getByRole('link', { name: /Dashboard/ }).click();
+  await b.evaluate(() => { document.hasFocus = () => false; });
+  const chimesBefore = await chimes(b);
+  await msgA.fill('ping for desktop notification');
+  await msgA.press('Enter');
+  await expect.poll(() => b.evaluate(() => (window as unknown as { __notes: { title: string; body?: string }[] }).__notes), { timeout: 20_000 })
+    .toContainEqual({ title: 'Anna Admin', body: 'ping for desktop notification' });
+  expect(await chimes(b)).toBeGreaterThan(chimesBefore);
+  await expect(b.getByLabel(/\d+ unread messages/)).toBeVisible({ timeout: 20_000 });
+
+  // announcements: A publishes with acknowledgement → B is notified, sees it and acknowledges
+  await a.goto('/app/communication?view=announcements');
+  await a.getByRole('button', { name: 'New announcement' }).click();
+  const dlg = a.getByRole('dialog');
+  await dlg.getByLabel('Title').fill('Office closed Friday');
+  await dlg.getByLabel('Message').fill('The office is closed this Friday for maintenance.');
+  await dlg.getByText('Require acknowledgement').click();
+  await dlg.getByRole('button', { name: 'Publish' }).click();
+  await expect(a.getByRole('heading', { name: 'Office closed Friday' })).toBeVisible({ timeout: 15_000 });
+  const { data: note } = await B.sb.from('notifications').select('title').eq('type', 'announcement');
+  expect(note?.map((n) => n.title)).toContain('New announcement: Office closed Friday');
+  await b.goto('/app/communication?view=announcements');
+  await expect(b.getByRole('heading', { name: 'Office closed Friday' })).toBeVisible({ timeout: 15_000 });
+  await expect(b.getByRole('button', { name: 'New announcement' })).toHaveCount(0); // employees cannot publish
+  await b.getByRole('button', { name: 'Acknowledge' }).click();
+  await expect(b.getByText(/Acknowledged/).first()).toBeVisible();
+  await a.reload();
+  await expect(a.getByText('1 acknowledged')).toBeVisible({ timeout: 15_000 });
+
+  // group photo: the admin uploads one; renaming the group keeps it
+  const { data: squad } = await A.sb.from('chat_conversations').select('id').eq('name', 'Launch Squad').single();
+  await a.goto(`/app/communication?c=${squad!.id}`);
+  await a.getByRole('button', { name: 'Conversation details' }).click();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  await a.getByLabel('Group photo').setInputFiles({ name: 'team.png', mimeType: 'image/png', buffer: png });
+  await expect(a.getByText('Group photo updated')).toBeVisible({ timeout: 15_000 });
+  await expect(a.getByRole('button', { name: 'Change photo' }).or(a.getByText('Change photo'))).toBeVisible({ timeout: 15_000 });
+  const photoPath = (await A.sb.from('chat_conversations').select('image_url').eq('id', squad!.id).single()).data!.image_url as string;
+  expect(photoPath).toMatch(new RegExp(`^${company}/${squad!.id}/`));
+  await a.getByRole('button', { name: 'Edit group' }).click();
+  await a.getByLabel('Group name').fill('Launch Squad HQ');
+  await a.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(async () => (await A.sb.from('chat_conversations').select('name, image_url').eq('id', squad!.id).single()).data, { timeout: 15_000 })
+    .toEqual({ name: 'Launch Squad HQ', image_url: photoPath });
+
+  // UI isolation: a user of another company sees none of these people or conversations
+  const ctxC = await browser.newContext();
+  const c = await ctxC.newPage();
+  await uiLogin(c, C.email);
+  await c.goto('/app/communication');
+  await expect(c.getByRole('heading', { name: 'Team communication' })).toBeVisible();
+  await expect(c.getByTestId('conversation-list')).not.toContainText(/Anna Admin|Ben Builder|Launch Squad/);
+  await c.getByRole('button', { name: 'New message' }).first().click();
+  await expect(c.getByRole('dialog')).toContainText('No people found');
+  await c.keyboard.press('Escape');
+  await c.goto(`/app/communication?c=${dm!.id}`); // direct URL to a foreign conversation
+  await c.waitForTimeout(3000);
+  await expect(c.getByTestId('message-pane')).toHaveCount(0);
+  await expect(c.getByText('react to this please')).toHaveCount(0);
+  await ctxC.close();
+
+  expect(errors, errors.join('\n')).toEqual([]);
+  await ctxA.close();
+  await ctxB.close();
+});
+
+test('mobile chat layout: list → conversation → back, composer on screen, no horizontal scroll', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const ctx = await browser.newContext({ ...devices['Pixel 7'] });
+  const m = await ctx.newPage();
+  await uiLogin(m, B.email);
+  await m.goto('/app/communication');
+  const list = m.getByTestId('conversation-list');
+  await expect(list).toBeVisible();
+  await list.getByRole('button', { name: /^Anna Admin/ }).click();
+  await expect(m.getByTestId('message-pane')).toBeVisible();
+  await expect(list).toBeHidden(); // single-pane on phones
+  const composer = m.getByLabel('Message', { exact: true });
+  await expect(composer).toBeInViewport();
+  const vw = await m.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  expect(vw.sw).toBeLessThanOrEqual(vw.iw);
+  // tap a message → its action toolbar is reachable on touch
+  const row = m.getByTestId('message-row').last();
+  await row.tap();
+  await expect(row.getByRole('button', { name: 'Add reaction' })).toBeVisible();
+  await composer.fill('sent from my phone');
+  await composer.press('Enter');
+  await expect(m.getByTestId('message-pane').getByText('sent from my phone')).toBeVisible({ timeout: 20_000 });
+  await m.getByRole('button', { name: 'Back to conversations' }).click();
+  await expect(list).toBeVisible();
+  await ctx.close();
 });

@@ -8,6 +8,7 @@ import { fmtMoney } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
 import { useDepartments, useDesignations, useEmployeeOptions } from '@/lib/lookups';
 import { optId, optStr, reqDate, reqNum } from '@/lib/schemas';
+import { useOfferTemplates } from './OfferTemplates';
 
 export interface Offer {
   id: string; company_id: string; offer_number: string; application_id: string; candidate_id: string; job_id: string;
@@ -18,10 +19,12 @@ export interface Offer {
   candidate_signature: string | null; decline_reason: string | null; approved_by: string | null; approved_at: string | null;
   created_by: string; created_at: string; candidate_name: string; candidate_email: string; job_title: string;
   designation_title: string | null; department_name: string | null; reporting_manager_name: string | null; created_by_name: string | null; approved_by_name: string | null;
+  template_id?: string | null;
 }
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
 const schema = z.object({
+  template_id: optId,
   designation_id: optId,
   department_id: optId,
   reporting_manager_id: optId,
@@ -59,8 +62,11 @@ export function OfferFormModal({ open, onClose, application, offer, onSaved }: {
   const designations = useDesignations();
   const departments = useDepartments();
   const employees = useEmployeeOptions();
+  const templates = useOfferTemplates();
   const save = useAction(async (v: Values) => {
     const data = clean(v as Record<string, unknown>);
+    // offers.template_id exists only after migration 1400 (templates query succeeds): otherwise never send it
+    if (!templates.isSuccess) delete data.template_id;
     if (offer) return (await api.db.update<{ id: string }>('offers', offer.id, data)).id;
     return (await api.db.insert<{ id: string }>('offers', { ...data, company_id: companyId, application_id: application!.id })).id;
   }, { success: offer ? 'Offer updated' : 'Offer drafted', onSuccess: (id) => onSaved?.(id) });
@@ -71,9 +77,11 @@ export function OfferFormModal({ open, onClose, application, offer, onSaved }: {
     joining_date: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
     expiry_date: format(addDays(new Date(), company?.offer_validity_days ?? 7), 'yyyy-MM-dd'),
     probation_months: 6, work_location: company?.city ?? '',
+    template_id: templates.data?.rows.find((t) => t.is_default)?.id ?? '',
   };
   const cur = company?.currency ?? 'INR';
   const fields: FieldDef<Values>[] = [
+    { name: 'template_id', label: 'Letter template', type: 'select', hidden: !templates.isSuccess || !templates.data?.rows.length, options: (templates.data?.rows ?? []).map((t) => ({ value: t.id, label: `${t.name}${t.is_default ? ' (default)' : ''}` })), span: 2, hint: 'Controls the letter title and wording; manage templates on the Offers page' },
     { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options },
     { name: 'department_id', label: 'Department', type: 'select', options: departments.options },
     { name: 'employment_type', label: 'Employment type', type: 'select', options: EMPLOYMENT_TYPES, required: true },

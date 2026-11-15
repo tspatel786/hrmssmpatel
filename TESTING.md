@@ -9,7 +9,8 @@
 | Database (PGlite) | `npx vitest run tests/db` | The **real migrations** in Postgres 18 WASM through the same adapter the app uses, with RLS enforced per call |
 | Live Supabase | `npm run test:live` | Real Auth + PostgREST + Storage RLS + deployed Edge Function on the configured project (opt-in, self-cleaning) |
 | E2E (demo) | `npm run test:e2e` | Playwright against the demo build: full hiring lifecycle through the UI, roles, navigation, mobile layout |
-| E2E (Supabase) | `SUPABASE_LIVE=1 npx playwright test --project=supabase` | Two browser contexts, real Realtime: DMs, groups, sound, receipts, files, search, mute, multi-tab dedupe, isolation |
+| Live Realtime | `SUPABASE_LIVE=1 npx vitest run tests/supabase/realtime.test.ts` | Websocket delivery to participants, typing/receipt/reaction propagation, no cross-company payloads (incl. DELETE events) |
+| E2E (Supabase) | `SUPABASE_LIVE=1 npx playwright test --project=supabase` | Multiple browser contexts, real Realtime: DMs, groups (+photo), sound, browser notifications, receipts, typing, presence, reactions, pins, files, search, mute, multi-tab dedupe, announcements, mobile chat layout, UI isolation |
 
 ## Database suites (`tests/db`)
 - `lifecycle.test.ts` — company → HR user → job → public application with resume → shortlist (single email despite
@@ -25,6 +26,19 @@
   access, blocked direct writes, own-message edit/delete, reactions, pins, replies, groups & admin rules, admin
   promotion, mute, attachments & storage policies, presence/typing visibility, announcements (permissions, targeting, acks).
 - `seed.test.ts` — the demo seed runs end-to-end through the real RPCs.
+- `hr_gaps.test.ts` — late/early flags (time zone, grace, leave days), correction requests (validation, visibility,
+  manager/HR approval, no self-approval, cancel/reject), team leave calendar scoping (HR vs department vs other companies).
+- `recruitment_gaps.test.ts` — careers education + reference number, bulk stage/reject with per-item failures, bulk tags,
+  interview reminders (once per scheduled time, re-armed on reschedule, service-role only), offer templates (default,
+  permissions, same-company enforcement).
+
+## Unit (`tests/unit`)
+- `pdf.test.ts` — offer-template placeholder rendering, template vs standard offer letter, paginated report PDF.
+
+## Demo E2E additions
+- `e2e/gaps.spec.ts` — employee correction request → manager approval, team calendar, dark-mode toggle/persistence,
+  bulk tag + bulk stage move, offer template create + preview, attendance report PDF download, careers education fields +
+  reference number, dark-mode rendering of main pages (shares one booted demo database across its tests).
 
 ## Test data & safety
 - Tests use isolated databases (PGlite) or pre-confirmed admin-created users with random suffixes on the dedicated

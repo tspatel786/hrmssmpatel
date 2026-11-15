@@ -1,6 +1,7 @@
 import { addDays, addMonths, eachDayOfInterval, endOfMonth, format, getISODay, startOfMonth } from 'date-fns';
 import clsx from 'clsx';
-import { CalendarCheck, ChevronLeft, ChevronRight, LogIn, LogOut, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, ClipboardEdit, LogIn, LogOut, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { DataTable, StatusBadge, type Column } from '@/components/DataTable';
@@ -13,16 +14,29 @@ import { fmtDate, fmtTime, titleCase } from '@/lib/format';
 import { useAction, useList, useRpc, useTable } from '@/lib/hooks';
 import { useDepartments } from '@/lib/lookups';
 import { reqDate, reqStr } from '@/lib/schemas';
+import { CorrectionsPanel, RequestCorrectionModal } from './AttendanceCorrections';
 
-interface Rec { id: string; employee_id: string; attendance_date: string; check_in: string | null; check_out: string | null; status: string; work_minutes: number | null; source: string; notes: string | null; employee_name: string; employee_code: string; department_name: string | null; department_id: string | null }
+interface Rec { id: string; employee_id: string; attendance_date: string; check_in: string | null; check_out: string | null; status: string; work_minutes: number | null; source: string; notes: string | null; is_late?: boolean; late_minutes?: number; is_early_exit?: boolean; early_exit_minutes?: number; employee_name: string; employee_code: string; department_name: string | null; department_id: string | null }
 interface Holiday { id: string; name: string; holiday_date: string; is_optional: boolean }
 interface Emp { id: string; full_name: string; employee_code: string; department_id: string | null; department_name: string | null }
+
+/** Late / early badges (columns exist once migration 1300 is applied; absent -> nothing shown). */
+function Flags({ r, compact }: { r?: Pick<Rec, 'is_late' | 'late_minutes' | 'is_early_exit' | 'early_exit_minutes'> | null; compact?: boolean }) {
+  if (!r || (!r.is_late && !r.is_early_exit)) return null;
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {r.is_late && <span className="rounded bg-orange-50 px-1 text-[10px] font-semibold text-orange-700" title={`${r.late_minutes} min late`}>{compact ? 'Late' : `Late ${r.late_minutes}m`}</span>}
+      {r.is_early_exit && <span className="rounded bg-rose-50 px-1 text-[10px] font-semibold text-rose-700" title={`Left ${r.early_exit_minutes} min early`}>{compact ? 'Early' : `Early ${r.early_exit_minutes}m`}</span>}
+    </span>
+  );
+}
 
 const DOT: Record<string, string> = { present: 'bg-emerald-500', absent: 'bg-rose-500', half_day: 'bg-amber-500', on_leave: 'bg-violet-500', holiday: 'bg-cyan-500' };
 
 function MyAttendance({ companyId, employeeId }: { companyId: string; employeeId: string }) {
   const { company } = useCompany();
   const [month, setMonth] = useState(startOfMonth(new Date()));
+  const [correcting, setCorrecting] = useState<string | null>(null);
   const me = useRpc<{ today: { check_in: string | null; check_out: string | null; status: string } | null }>('my_dashboard', { p_company: companyId });
   const recs = useList<Rec>({ table: 'attendance_records', filters: [{ column: 'employee_id', op: 'eq', value: employeeId }, { column: 'attendance_date', op: 'gte', value: format(month, 'yyyy-MM-dd') }, { column: 'attendance_date', op: 'lte', value: format(endOfMonth(month), 'yyyy-MM-dd') }], range: [0, 40] });
   const hol = useList<Holiday>({ table: 'holidays', filters: [{ column: 'company_id', op: 'eq', value: companyId }, { column: 'holiday_date', op: 'gte', value: format(month, 'yyyy-MM-dd') }, { column: 'holiday_date', op: 'lte', value: format(endOfMonth(month), 'yyyy-MM-dd') }] });
@@ -53,11 +67,12 @@ function MyAttendance({ companyId, employeeId }: { companyId: string; employeeId
               : !t.check_out ? <Button variant="secondary" className="w-full" icon={<LogOut className="h-4 w-4" />} loading={clockOut.isPending} onClick={() => clockOut.mutate()}>Clock out</Button>
                 : <p className="rounded-lg bg-emerald-50 py-2 text-center text-sm font-medium text-emerald-700">Completed · {titleCase(t.status)}</p>}
           </div>
-          <p className="mt-3 text-xs text-slate-500">Office hours {company?.work_start?.slice(0, 5)} – {company?.work_end?.slice(0, 5)}. Less than 4 hours counts as a half day.</p>
+          <p className="mt-3 text-xs text-slate-500">Office hours {company?.work_start?.slice(0, 5)} – {company?.work_end?.slice(0, 5)} ({company?.late_grace_minutes ?? 10} min grace). Less than 4 hours counts as a half day.</p>
+          <Button size="sm" variant="ghost" className="mt-2 w-full" icon={<ClipboardEdit className="h-4 w-4" />} onClick={() => setCorrecting(format(new Date(), 'yyyy-MM-dd'))}>Request a correction</Button>
         </Card>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatCard label="Present" value={count('present')} tone="green" />
-          <StatCard label="Half days" value={count('half_day')} tone="amber" />
+          <StatCard label="Half days" value={count('half_day')} tone="amber" hint={`${rows.filter((r) => r.is_late).length} late · ${rows.filter((r) => r.is_early_exit).length} early exits`} />
           <StatCard label="On leave" value={count('on_leave')} tone="violet" />
           <StatCard label="Hours worked" value={hours.toFixed(1)} tone="blue" hint={format(month, 'MMMM')} />
         </div>
@@ -83,6 +98,7 @@ function MyAttendance({ companyId, employeeId }: { companyId: string; employeeId
                     {r && <span className="mt-1 flex items-center gap-1"><span className={clsx('h-2 w-2 rounded-full', DOT[r.status] ?? 'bg-slate-300')} /><span className="truncate">{titleCase(r.status)}</span></span>}
                     {!r && h && <span className="mt-1 block truncate text-cyan-700">{h.name}</span>}
                     {r?.work_minutes ? <span className="block text-slate-400">{(r.work_minutes / 60).toFixed(1)}h</span> : null}
+                    <Flags r={r} compact />
                   </div>
                 );
               })}
@@ -91,6 +107,7 @@ function MyAttendance({ companyId, employeeId }: { companyId: string; employeeId
           </>
         )}
       </Card>
+      <RequestCorrectionModal open={!!correcting} onClose={() => setCorrecting(null)} companyId={companyId} initialDate={correcting ?? undefined} />
     </div>
   );
 }
@@ -153,7 +170,7 @@ function DailyRegister({ companyId }: { companyId: string }) {
                     <tr key={e.id}>
                       <td><div className="flex items-center gap-2"><Avatar name={e.full_name} size="xs" /><span className="font-medium">{e.full_name}</span><span className="text-xs text-slate-400">{e.employee_code}</span></div></td>
                       <td className="hidden md:table-cell">{e.department_name ?? '—'}</td>
-                      <td>{r ? <StatusBadge kind="attendance" value={r.status} /> : <span className="text-xs text-slate-400">Not marked</span>}</td>
+                      <td><span className="flex flex-wrap items-center gap-1">{r ? <StatusBadge kind="attendance" value={r.status} /> : <span className="text-xs text-slate-400">Not marked</span>}<Flags r={r} /></span></td>
                       <td>{r?.check_in ? fmtTime(r.check_in) : '—'}</td><td>{r?.check_out ? fmtTime(r.check_out) : '—'}</td>
                       <td className="hidden md:table-cell">{r?.work_minutes ? (r.work_minutes / 60).toFixed(1) : '—'}</td>
                       {manage && <td className="text-right"><Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => open(e, r)}>{r ? 'Edit' : 'Mark'}</Button></td>}
@@ -188,7 +205,8 @@ function Records({ companyId }: { companyId: string }) {
     { key: 'attendance_date', header: 'Date', sortable: true, render: (r) => fmtDate(r.attendance_date, 'EEE, dd MMM yyyy') },
     { key: 'employee_name', header: 'Employee', sortable: true, render: (r) => <span><span className="font-medium">{r.employee_name}</span> <span className="text-xs text-slate-400">{r.employee_code}</span></span> },
     { key: 'department_name', header: 'Department', hideOnMobile: true, render: (r) => r.department_name ?? '—' },
-    { key: 'status', header: 'Status', sortable: true, render: (r) => <StatusBadge kind="attendance" value={r.status} /> },
+    { key: 'status', header: 'Status', sortable: true, render: (r) => <span className="flex flex-wrap items-center gap-1"><StatusBadge kind="attendance" value={r.status} /><Flags r={r} /></span>,
+      csv: (r) => [r.status, r.is_late ? `late ${r.late_minutes}m` : '', r.is_early_exit ? `early ${r.early_exit_minutes}m` : ''].filter(Boolean).join(' · ') },
     { key: 'check_in', header: 'In', render: (r) => (r.check_in ? fmtTime(r.check_in) : '—') },
     { key: 'check_out', header: 'Out', render: (r) => (r.check_out ? fmtTime(r.check_out) : '—') },
     { key: 'work_minutes', header: 'Hours', sortable: true, hideOnMobile: true, render: (r) => (r.work_minutes ? (r.work_minutes / 60).toFixed(1) : '—'), csv: (r) => (r.work_minutes ? (r.work_minutes / 60).toFixed(2) : '') },
@@ -245,14 +263,17 @@ export function Attendance() {
   const { companyId, can } = useCompany();
   const me = useRpc<{ employee: { id: string } | null }>('my_dashboard', companyId ? { p_company: companyId } : null);
   const employeeId = me.data?.employee?.id;
-  const tabs = [
+  type TabKey = 'mine' | 'register' | 'records' | 'corrections' | 'holidays';
+  const tabs: { value: TabKey; label: string }[] = [
     ...(employeeId ? [{ value: 'mine' as const, label: 'My attendance' }] : []),
     ...(can('attendance.view') ? [{ value: 'register' as const, label: 'Daily register' }, { value: 'records' as const, label: 'All records' }] : []),
+    ...(employeeId || can('attendance.view') ? [{ value: 'corrections' as const, label: 'Corrections' }] : []),
     { value: 'holidays' as const, label: 'Holidays' },
   ];
-  const [tab, setTab] = useState<'mine' | 'register' | 'records' | 'holidays' | null>(null);
+  const [params, setParams] = useSearchParams();
+  const setTab = (t: TabKey) => setParams({ tab: t }, { replace: true });
   if (me.isLoading || !companyId) return <PageLoader />;
-  const active = tab ?? tabs[0].value;
+  const active = tabs.find((t) => t.value === params.get('tab'))?.value ?? tabs[0].value;
   return (
     <>
       <PageHeader title="Attendance" description="Clock in and out, review attendance and manage the holiday calendar." />
@@ -260,6 +281,7 @@ export function Attendance() {
       {active === 'mine' && employeeId && <MyAttendance companyId={companyId} employeeId={employeeId} />}
       {active === 'register' && <DailyRegister companyId={companyId} />}
       {active === 'records' && <Records companyId={companyId} />}
+      {active === 'corrections' && <CorrectionsPanel companyId={companyId} myEmployeeId={employeeId} />}
       {active === 'holidays' && <Holidays companyId={companyId} />}
     </>
   );

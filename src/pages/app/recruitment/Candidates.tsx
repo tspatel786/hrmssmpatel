@@ -12,12 +12,13 @@ import { fileSize, fmtRelative } from '@/lib/format';
 import { useAction, useTable } from '@/lib/hooks';
 import { useJobs } from '@/lib/lookups';
 import { optNum, optStr, optUrl, reqStr, tags } from '@/lib/schemas';
+import { BulkCandidateActions } from './BulkActions';
 
 export interface Candidate {
   id: string; company_id: string; first_name: string; last_name: string; full_name: string; email: string; phone: string | null;
   current_location: string | null; current_company: string | null; current_title: string | null; experience_years: number | null;
   current_ctc: number | null; expected_ctc: number | null; notice_period_days: number | null; linkedin_url: string | null;
-  portfolio_url: string | null; skills: string[]; tags: string[]; source: string; notes: string | null; applications_count: number;
+  portfolio_url: string | null; skills: string[]; tags: string[]; highest_qualification?: string | null; institution?: string | null; graduation_year?: number | null; source: string; notes: string | null; applications_count: number;
   latest_stage: string | null; latest_job_title: string | null; last_applied_at: string | null; has_resume: boolean; created_at: string;
 }
 export interface Application {
@@ -124,6 +125,7 @@ export function Candidates() {
     { key: 'experience_years', header: 'Exp.', sortable: true, render: (c) => (c.experience_years != null ? `${c.experience_years} yrs` : '—') },
     { key: 'skills', header: 'Skills', hideOnMobile: true, render: (c) => <div className="flex max-w-[220px] flex-wrap gap-1">{c.skills.slice(0, 3).map((s) => <Badge key={s}>{s}</Badge>)}{c.skills.length > 3 && <Badge>+{c.skills.length - 3}</Badge>}</div> },
     { key: 'latest_stage', header: 'Latest stage', render: (c) => c.latest_stage ? <div><Badge tone={stageInfo(c.latest_stage).tone} dot>{stageInfo(c.latest_stage).label}</Badge><p className="mt-0.5 max-w-[180px] truncate text-xs text-slate-500">{c.latest_job_title}</p></div> : <span className="text-slate-400">No application</span> },
+    { key: 'tags', header: 'Tags', hideOnMobile: true, render: (c) => (c.tags.length ? <div className="flex max-w-[160px] flex-wrap gap-1">{c.tags.map((t) => <Badge key={t} tone="violet">{t}</Badge>)}</div> : '—'), csv: (c) => c.tags.join('; ') },
     { key: 'source', header: 'Source', hideOnMobile: true, render: (c) => <span className="capitalize">{c.source.replace('_', ' ')}</span> },
     { key: 'has_resume', header: 'Resume', hideOnMobile: true, render: (c) => (c.has_resume ? <FileText className="h-4 w-4 text-brand-600" aria-label="Has resume" /> : '—'), csv: (c) => (c.has_resume ? 'yes' : 'no') },
     { key: 'created_at', header: 'Added', sortable: true, hideOnMobile: true, render: (c) => fmtRelative(c.created_at) },
@@ -134,6 +136,7 @@ export function Candidates() {
         actions={can('candidates.manage') && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAdding(true)}>Add candidate</Button>} />
       <DataTable table={table} columns={columns.filter((c) => c.key !== 'email')} searchPlaceholder="Search name, email, skills…" exportName="candidates"
         onRowClick={(c) => navigate(`/app/recruitment/candidates/${c.id}`)}
+        bulkActions={can('candidates.manage') ? (sel, clear) => <BulkCandidateActions selected={sel} clear={clear} /> : undefined}
         filters={[{ key: 'latest_stage', label: 'Stages', options: STAGES.map((s) => ({ value: s.value, label: s.label })) }, { key: 'source', label: 'Sources', options: SOURCES }]}
         mobileCard={(c) => (
           <div className="flex items-center gap-3"><Avatar name={c.full_name} size="sm" /><div className="min-w-0 flex-1"><p className="font-medium">{c.full_name}</p><p className="truncate text-xs text-slate-500">{c.current_title ?? c.email}</p></div>{c.latest_stage && <Badge tone={stageInfo(c.latest_stage).tone}>{stageInfo(c.latest_stage).label}</Badge>}</div>

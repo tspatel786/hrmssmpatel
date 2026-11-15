@@ -147,3 +147,73 @@ describe('Announcements', () => {
     expect((await db(a).list({ table: 'v_announcements', filters: [{ column: 'title', op: 'eq', value: 'Sales kickoff' }] })).count).toBe(1);
   });
 });
+
+// Regression tests for 20261115001200_communication_fixes (found during Communication UAT)
+describe('UAT fixes: realtime isolation, storage prefix, presence status', () => {
+  it('typing stop never deletes (Realtime does not RLS-filter DELETE events)', async () => {
+    await db(b).rpc('chat_set_typing', { p_conversation: dm, p_typing: true });
+    await db(b).rpc('chat_set_typing', { p_conversation: dm, p_typing: false });
+    const rows = await sql<{ typing_at: string }>(pg, `select typing_at::text from chat_typing_status where conversation_id = $1 and user_id = $2`, [dm, b]);
+    expect(rows).toHaveLength(1);
+    expect(new Date(rows[0].typing_at).getTime()).toBe(0);
+    await db(b).rpc('chat_set_typing', { p_conversation: dm, p_typing: true });
+    await db(b).rpc('chat_send_message', { p_conversation: dm, p_body: 'typing reset by send' });
+    const [after] = await sql<{ typing_at: string }>(pg, `select typing_at::text from chat_typing_status where conversation_id = $1 and user_id = $2`, [dm, b]);
+    expect(new Date(after.typing_at).getTime()).toBe(0);
+  });
+
+  it('reaction, read-receipt and membership changes touch the conversation (RLS-checked realtime signal)', async () => {
+    const stamp = async () => (await sql<{ u: string }>(pg, `select updated_at::text u from chat_conversations where id = $1`, [dm]))[0].u;
+    const [m] = await sql<{ id: string }>(pg, `select id from chat_messages where conversation_id = $1 and deleted_at is null and sender_id is not null order by created_at desc limit 1`, [dm]);
+    let before = await stamp();
+    await db(a).rpc('chat_toggle_reaction', { p_message: m.id, p_emoji: '🎉' });
+    expect(await stamp()).not.toBe(before);
+    before = await stamp();
+    await db(a).rpc('chat_toggle_reaction', { p_message: m.id, p_emoji: '🎉' }); // removal
+    expect(await stamp()).not.toBe(before);
+    before = await stamp();
+    await db(a).rpc('chat_mark_read', { p_conversation: dm });
+    expect(await stamp()).not.toBe(before);
+  });
+
+  it('chat uploads must use the conversation’s own company prefix', async () => {
+    await expect(uploadAs(pg, b, 'chat-attachments', `${rivalCompany}/${dm}/${crypto.randomUUID()}/x.pdf`)).rejects.toThrow();
+    await uploadAs(pg, b, 'chat-attachments', `${company}/${dm}/${crypto.randomUUID()}/ok.pdf`);
+  });
+
+  it('directory exposes presence status; away/offline is distinguishable from online', async () => {
+    await db(b).rpc('chat_heartbeat', { p_status: 'offline' });
+    const [row] = (await db(a).list<{ presence_status: string; last_seen_at: string }>({ table: 'v_chat_directory', filters: [{ column: 'user_id', op: 'eq', value: b }] })).rows;
+    expect(row.presence_status).toBe('offline');
+    expect((await db(rival).list({ table: 'v_chat_directory', filters: [{ column: 'user_id', op: 'eq', value: b }] })).count).toBe(0);
+  });
+
+  it('delivery marking only writes conversations with undelivered messages', async () => {
+    await db(a).rpc('chat_mark_read', { p_conversation: dm });
+    const [p1] = await sql<{ d: string }>(pg, `select last_delivered_at::text d from chat_participants where conversation_id = $1 and user_id = $2`, [dm, a]);
+    await db(a).rpc('chat_mark_delivered', { p_company: company });
+    const [p2] = await sql<{ d: string }>(pg, `select last_delivered_at::text d from chat_participants where conversation_id = $1 and user_id = $2`, [dm, a]);
+    expect(p2.d).toBe(p1.d);
+    await db(b).rpc('chat_send_message', { p_conversation: dm, p_body: 'new one' });
+    await db(a).rpc('chat_mark_delivered', { p_company: company });
+    const [p3] = await sql<{ d: string }>(pg, `select last_delivered_at::text d from chat_participants where conversation_id = $1 and user_id = $2`, [dm, a]);
+    expect(p3.d).not.toBe(p1.d);
+  });
+});
+
+describe('UAT fixes: announcement realtime signal (no DELETE broadcast across companies)', () => {
+  it('announcement insert/update/delete bump the company signal row; only members can read it; nobody can write it', async () => {
+    const stamp = async () => (await sql<{ t: string }>(pg, `select announcements_at::text t from company_realtime_signals where company_id = $1`, [company]))[0]?.t;
+    const ann = await db(a).insert<{ id: string }>('announcements', { company_id: company, title: 'Signal check', body: 'Testing the signal row.' });
+    const t1 = await stamp();
+    expect(t1).toBeTruthy();
+    await db(a).update('announcements', ann.id, { pinned: true });
+    const t2 = await stamp();
+    expect(t2).not.toBe(t1);
+    await db(a).remove('announcements', ann.id);
+    expect(await stamp()).not.toBe(t2);
+    expect((await db(b).list({ table: 'company_realtime_signals', filters: [{ column: 'company_id', op: 'eq', value: company }] })).count).toBe(1);
+    expect((await db(rival).list({ table: 'company_realtime_signals', filters: [{ column: 'company_id', op: 'eq', value: company }] })).count).toBe(0);
+    await expect(db(a).update('company_realtime_signals', company, { announcements_at: new Date().toISOString() }, 'company_id')).rejects.toThrow();
+  });
+});

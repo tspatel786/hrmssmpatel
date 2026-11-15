@@ -39,6 +39,25 @@ export interface OfferPdfData {
   candidate_signature?: string | null;
   responded_at?: string | null;
   company: PdfCompany;
+  /** Offer-letter template (title/intro/terms/closing with {{placeholders}}); default wording when absent. */
+  template?: OfferTemplateText | null;
+}
+
+export interface OfferTemplateText { title: string; intro: string; general_terms: string; closing: string }
+
+export const OFFER_PLACEHOLDERS = ['candidate_name', 'role', 'department', 'department_clause', 'company_name', 'joining_date', 'expiry_date', 'ctc', 'work_location', 'employment_type', 'probation_months'] as const;
+
+/** Replaces {{placeholders}} in template text; unknown placeholders are left visible so authors can spot typos. */
+export function renderOfferText(text: string, o: OfferPdfData): string {
+  const c = o.company;
+  const role = o.designation || o.job_title;
+  const vars: Record<string, string> = {
+    candidate_name: o.candidate_name, role, department: o.department ?? '', department_clause: o.department ? ` in the ${o.department} department` : '',
+    company_name: c.legal_name || c.name, joining_date: fmtDate(o.joining_date), expiry_date: fmtDate(o.expiry_date),
+    ctc: fmtMoneyPlain(o.ctc_annual, c.currency || 'INR'), work_location: o.work_location || 'As communicated by HR',
+    employment_type: titleCase(o.employment_type), probation_months: String(o.probation_months),
+  };
+  return text.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, k: string) => (k in vars ? vars[k] : m));
 }
 
 function hexToRgb(hex?: string | null): [number, number, number] {
@@ -137,7 +156,8 @@ export function generateOfferPdf(o: OfferPdfData): Blob {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const c = o.company;
   const cur = c.currency || 'INR';
-  header(doc, c, 'Offer of Employment');
+  const t = o.template;
+  header(doc, c, t?.title?.trim() || 'Offer of Employment');
   const cur2 = new Cursor(doc, 134);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
@@ -148,7 +168,7 @@ export function generateOfferPdf(o: OfferPdfData): Blob {
 
   const role = o.designation || o.job_title;
   cur2.para(`Dear ${o.candidate_name},`, { bold: true });
-  cur2.para(
+  cur2.para(t ? renderOfferText(t.intro, o) :
     `We are delighted to offer you the position of ${role}${o.department ? ` in the ${o.department} department` : ''} at ${c.legal_name || c.name}. ` +
       `This letter sets out the principal terms of your employment. We were impressed by your experience and believe you will be a great addition to our team.`,
   );
@@ -175,12 +195,12 @@ export function generateOfferPdf(o: OfferPdfData): Blob {
   );
   cur2.para(`Annual CTC in words: ${cur} ${amountInWords(o.ctc_annual)} only.`, { size: 9.5 });
   cur2.para('3. General Terms', { bold: true, size: 11.5, gap: 2 });
-  cur2.para(
+  cur2.para(t ? renderOfferText(t.general_terms, o) :
     'Your employment will be governed by the company policies in force from time to time. This offer is contingent upon satisfactory ' +
       'verification of your documents and background. Statutory deductions (provident fund, professional tax and income tax) will apply as per law.',
   );
   if (o.additional_terms?.trim()) cur2.para(o.additional_terms.trim());
-  cur2.para(
+  cur2.para(t ? renderOfferText(t.closing, o) :
     `Please confirm your acceptance by ${fmtDate(o.expiry_date)} using the secure link shared with you by email. This offer lapses automatically if not accepted by that date.`,
   );
   cur2.ensure(120);
@@ -315,5 +335,68 @@ export function generateSampleResume(name: string, title: string, email: string,
   c.para(skills.join(' · '));
   c.para('Experience', { bold: true, size: 13 });
   c.para(`${title}, Previous Company (${new Date().getFullYear() - years} – present): led key initiatives, mentored peers and improved delivery speed.`);
+  return doc.output('blob');
+}
+
+export interface ReportPdfInput {
+  title: string;
+  subtitle?: string;
+  columns: string[];
+  rows: string[][];
+  totals?: string[] | null;
+  company: PdfCompany;
+  numeric?: boolean[];
+}
+
+/** Tabular report as a landscape A4 PDF: branded header, repeated column headers, totals row, page numbers. */
+export function generateReportPdf(r: ReportPdfInput): Blob {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const left = 32;
+  const usable = W - left * 2;
+  header(doc, r.company, r.title);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  if (r.subtitle) doc.text(r.subtitle, W - 40, 40, { align: 'right' });
+  doc.text(`Generated ${fmtDate(new Date(), 'dd MMM yyyy, hh:mm a')} · ${r.rows.length} rows`, W - 40, 56, { align: 'right' });
+
+  // column widths proportional to content length (clamped), scaled to the page
+  const sample = [r.columns, ...r.rows.slice(0, 200), ...(r.totals ? [r.totals] : [])];
+  const weights = r.columns.map((_, i) => Math.min(40, Math.max(6, ...sample.map((row) => String(row[i] ?? '').length))));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const widths = weights.map((w) => (w / sum) * usable);
+  const xs = widths.map((_, i) => left + widths.slice(0, i).reduce((a, b) => a + b, 0));
+  const fs = r.columns.length > 10 ? 7 : 8;
+  let y = 104;
+
+  const drawRow = (cells: string[], kind: 'head' | 'body' | 'total', shade: boolean) => {
+    doc.setFont('helvetica', kind === 'body' ? 'normal' : 'bold');
+    doc.setFontSize(fs);
+    const lines = cells.map((c, i) => (doc.splitTextToSize(String(c ?? ''), widths[i] - 8) as string[]).slice(0, 2));
+    const h = Math.max(...lines.map((l) => l.length)) * (fs + 3) + 8;
+    if (y + h > H - 50) {
+      doc.addPage();
+      y = 40;
+      if (kind !== 'head') drawRow(r.columns, 'head', false);
+      doc.setFont('helvetica', kind === 'body' ? 'normal' : 'bold');
+      doc.setFontSize(fs);
+    }
+    if (kind === 'head' || kind === 'total' || shade) {
+      doc.setFillColor(...((kind === 'head' ? [241, 245, 249] : kind === 'total' ? [226, 232, 240] : [248, 250, 252]) as [number, number, number]));
+      doc.rect(left, y, usable, h, 'F');
+    }
+    doc.setTextColor(30, 41, 59);
+    lines.forEach((l, i) => {
+      const right = kind !== 'head' && r.numeric?.[i];
+      l.forEach((t, k) => doc.text(t, right ? xs[i] + widths[i] - 4 : xs[i] + 4, y + 11 + k * (fs + 3), right ? { align: 'right' } : undefined));
+    });
+    y += h;
+  };
+  drawRow(r.columns, 'head', false);
+  r.rows.forEach((row, i) => drawRow(row, 'body', i % 2 === 1));
+  if (r.totals) drawRow(r.totals, 'total', false);
+  footer(doc, `${r.company.legal_name || r.company.name} · ${r.title} · Confidential`);
   return doc.output('blob');
 }

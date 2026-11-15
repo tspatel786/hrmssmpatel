@@ -27,7 +27,9 @@ interface ChatValue {
 }
 
 const ChatCtx = createContext<ChatValue | null>(null);
-export const isOnline = (lastSeen?: string | null) => !!lastSeen && Date.now() - new Date(lastSeen).getTime() < 75_000;
+/** Online = heartbeat within 75 s and not explicitly signed off (status is absent on databases without migration 1200). */
+export const isOnline = (lastSeen?: string | null, status?: string | null) =>
+  !!lastSeen && status !== 'offline' && Date.now() - new Date(lastSeen).getTime() < 75_000;
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { user } = useSession();
@@ -70,7 +72,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!companyId || !user) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const off = api.realtime.subscribe(`chat-${companyId}`, ['chat_messages', 'chat_participants', 'chat_conversations', 'chat_reactions', 'chat_typing_status', 'announcements'], () => {
+    const off = api.realtime.subscribe(`chat-${companyId}`, [
+      // after migration 1200: chat_conversations (touched on reactions/receipts/membership) + company_realtime_signals (announcements)
+      'chat_messages', 'chat_conversations', 'chat_typing_status', 'company_realtime_signals',
+      // pre-1200 databases still publish these directly
+      'chat_participants', 'chat_reactions', 'announcements',
+    ], () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         setTick((t) => t + 1);
@@ -89,10 +96,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const beat = () => void api.db.rpc('chat_heartbeat', { p_status: document.hidden ? 'away' : 'online' }).catch(() => undefined);
     beat();
     const t = setInterval(beat, 30_000);
+    // best effort: tell colleagues we left when the tab/app is closed (otherwise presence expires after 75 s)
+    const leave = () => void api.db.rpc('chat_heartbeat', { p_status: 'offline' }).catch(() => undefined);
     document.addEventListener('visibilitychange', beat);
+    window.addEventListener('pagehide', leave);
     return () => {
       clearInterval(t);
       document.removeEventListener('visibilitychange', beat);
+      window.removeEventListener('pagehide', leave);
     };
   }, [user]);
 
