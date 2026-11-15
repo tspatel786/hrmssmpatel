@@ -145,7 +145,9 @@ describe.skipIf(!live)('Supabase live: lifecycle, isolation, storage', () => {
     expect(stats.headcount).toBe(1);
   });
 
-  it('deployed edge function delivers the queue (mock mode) and logs results', async () => {
+  // Invoking the worker sends every queued email. With a real provider (EMAIL_MODE=resend) that would mail the
+  // throwaway test addresses, so this runs only when the project is known to be in mock mode: LIVE_EMAIL_MODE=mock.
+  it.skipIf(process.env.LIVE_EMAIL_MODE !== 'mock')('deployed edge function delivers the queue (mock mode) and logs results', async () => {
     const queued = await hr.db.list({ table: 'email_logs', filters: [{ column: 'company_id', op: 'eq', value: company }, { column: 'status', op: 'eq', value: 'queued' }] });
     expect(queued.count).toBeGreaterThan(5);
     for (let i = 0; i < 5; i++) {

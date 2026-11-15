@@ -1,7 +1,10 @@
 # Runbook: apply migration 1200 (Communication cross-company Realtime fix)
 
-**Status on 2026-11-15:** NOT applied to the Supabase project. The leak is **not fixed in the live environment** until
-these steps are done and the live isolation test passes. Nothing below has been run against your project.
+**Status (final audit, 2026-11-15):** migrations 1200, 1300 and 1400 **are applied** to the Supabase project (applied by the
+project owner; verified read-only: `company_realtime_signals`, `v_chat_directory.presence_status`, `attendance_corrections`,
+`offer_templates` exist). Acceptance test `tests/supabase/realtime.test.ts`: **4 / 4 PASS**, including "another company receives
+no chat payloads at all, including DELETE events". The leak is **fixed in the live environment**. The steps below remain the
+procedure for any other environment (staging, a new project).
 
 ## What it fixes
 

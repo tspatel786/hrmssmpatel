@@ -1,6 +1,27 @@
 # UAT Report
 
-## Latest run — 2026-11-15 (branch `feature/comm-security-and-hr-gaps`, after the Communication security review)
+## Final production-readiness audit — 2026-11-15 (`main` @ `6cdb2e3` + branch `audit/production-readiness`)
+
+Migrations 1200, 1300 and 1400 are **applied** on the Supabase project (by the owner; verified read-only). The Realtime
+security issue is **resolved in production**: `realtime.test.ts` passes **4 / 4**. Full details and the GO / NO-GO
+recommendation: **FINAL_PRODUCTION_READINESS_REPORT.md**.
+
+| Suite | Command | Result |
+|---|---|---|
+| Typecheck | `npm run typecheck` | PASS |
+| Lint (zero warnings) | `npm run lint` | PASS |
+| Production build | `npm run build` | PASS |
+| Unit + DB | `npx vitest run tests/unit tests/db` | **136 / 136 PASS** (incl. new catalog-wide isolation + role matrix) |
+| Live Supabase integration | `npm run test:live` → `live.test.ts` | **7 / 7 PASS**, email-worker test skipped by design (`LIVE_EMAIL_MODE`) |
+| Live Realtime | `npm run test:live` → `realtime.test.ts` | **4 / 4 PASS** (incl. no DELETE-event payloads across companies) |
+| Live Communication E2E | `SUPABASE_LIVE=1 npx playwright test --project=supabase` | **4 / 4 PASS** |
+| Demo E2E desktop + mobile + tablet | `npx playwright test --project=desktop --project=mobile --project=tablet` | **PASS**: full run 7 / 7 + fixed recruiting spec 9 / 9 over 3 repeats (idle machine) |
+
+Root cause of the earlier intermittent CI failure: `e2e/gaps.spec.ts` matched the heading "Applicants" by substring, which
+also matched "No applicants yet" on jobs without applicants (strict-mode violation). Fixed with an exact match and a
+state-based wait.
+
+## Previous run — 2026-11-15 (branch `feature/comm-security-and-hr-gaps`, after the Communication security review)
 
 The production Supabase project still runs schema 0100–1100. **Migration 1200 is not applied**, so the production
 Realtime security issue is **NOT resolved** (see the Live Realtime row and `MIGRATION_1200_RUNBOOK.md`).

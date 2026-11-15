@@ -11,7 +11,8 @@ React SPA (Vite, lazy routes)
 Supabase
  ├─ Postgres: tables + RLS + SECURITY DEFINER RPCs (business rules) + triggers (automation, audit)
  ├─ Storage: resumes, documents, chat-attachments (private) · company-assets (public logos)
- ├─ Realtime: chat_* tables + announcements (postgres_changes, RLS-filtered)
+ ├─ Realtime: chat_messages, chat_conversations, chat_typing_status, company_realtime_signals (postgres_changes, RLS-filtered;
+ │            tables whose rows are deleted in normal use are not published — Realtime does not RLS-filter DELETE events)
  └─ Edge Function process-emails: drains email_logs queue (mock | Resend), service role only server-side
 ```
 

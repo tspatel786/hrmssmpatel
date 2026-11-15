@@ -38,7 +38,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --project=desktop --project=mobile
+      - run: npx playwright test --project=desktop --project=mobile --project=tablet
       - uses: actions/upload-artifact@v4
         if: always()
         with:

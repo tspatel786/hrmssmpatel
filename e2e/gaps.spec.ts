@@ -114,8 +114,10 @@ test('recruiting: bulk tag + bulk stage move, offer templates, reports PDF, care
   for (let i = 0; i < 8; i++) {
     await nav(page, '/app/recruitment/jobs');
     await page.locator('table tbody tr').nth(i).click();
-    await expect(page.getByRole('heading', { name: 'Applicants' })).toBeVisible();
-    await page.waitForTimeout(800);
+    // exact: a job without applicants also shows a "No applicants yet" heading, which a substring match would hit too
+    await expect(page.getByRole('heading', { name: 'Applicants', exact: true })).toBeVisible();
+    // wait until the list has settled into rows or the empty state instead of a fixed delay
+    await expect(appBoxes.first().or(page.getByRole('heading', { name: 'No applicants yet' }))).toBeVisible();
     if (await appBoxes.count()) break;
   }
   await appBoxes.first().check();

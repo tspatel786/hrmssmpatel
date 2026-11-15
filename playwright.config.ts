@@ -17,6 +17,8 @@ export default defineConfig({
   projects: [
     { name: 'desktop', testIgnore: /communication\.spec|compat\.spec|responsive\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173', viewport: { width: 1440, height: 900 } } },
     { name: 'mobile', testMatch: /responsive\.spec/, use: { ...devices['Pixel 7'], baseURL: 'http://localhost:4173' } },
+    // tablet portrait (iPad Mini size) on Chromium, the only browser CI installs; below 1024 px the app uses the mobile menu
+    { name: 'tablet', testMatch: /responsive\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true, baseURL: 'http://localhost:4173' } },
     ...(live ? [{ name: 'supabase', testMatch: /communication\.spec|compat\.spec/, use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4174' } }] : []),
   ],
   webServer: [

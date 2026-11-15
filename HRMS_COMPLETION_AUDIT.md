@@ -18,7 +18,7 @@ Every COMPLETED item has a UI, real database integration and automated test cove
 | 9 | Candidate management | COMPLETED | Profile, notes, ratings, timeline, search, documents, education, tags; bulk tag/untag + export of selected (added 2026-11-15) |
 | 10 | Recruitment pipeline | COMPLETED | Drag-and-drop Kanban (+ mobile move menu), guarded transitions, bulk stage move / bulk reject with per-item results (added 2026-11-15) |
 | 11 | Resume management | COMPLETED | Private storage, signed-URL preview/download, extra documents |
-| 12 | Interview scheduling | COMPLETED | Rounds, types, panel, conflict detection, reschedule, cancel, no-show, 24 h reminder emails to candidate + panel and in-app panel notification (added 2026-11-15; Supabase needs migration 1400 + function redeploy/pg_cron) |
+| 12 | Interview scheduling | COMPLETED | Rounds, types, panel, conflict detection, reschedule, cancel, no-show, 24 h reminder emails to candidate + panel and in-app panel notification (added 2026-11-15; migration 1400 applied on Supabase; automatic sending needs the email worker scheduled, e.g. pg_cron — not verified) |
 | 13 | Interview calendar | COMPLETED | Month / week / list views, "my interviews" filter |
 | 14 | Interview feedback | COMPLETED | Overall/technical/communication/culture ratings, recommendation, strengths/concerns |
 | 15 | Email automation | COMPLETED | 16 events, outbox in same transaction, dedupe, retry, server-side delivery (mock until provider configured) |
@@ -43,7 +43,7 @@ Every COMPLETED item has a UI, real database integration and automated test cove
 | 34 | Company settings | COMPLETED | Profile, branding/logo, careers, HR & payroll policies, users, roles, onboarding template |
 | 35 | **Communication — DMs** | COMPLETED | Search people (name/ID/department), realtime, typing (expiry fixed), presence status, timestamps, sent/delivered/read, unread counts, reply, edit, delete, reactions, copy, pin, search |
 | 36 | **Communication — groups** | COMPLETED | Create, describe, add/remove, admins, leave, member list, notifications, group photo upload (added in UAT) |
-| 37 | **Realtime & notifications** | NEEDS BUG FIXING (deploy) | Fix written & DB-tested (migration 1200: Realtime DELETE events leaked chat UUIDs across companies, verified live); must be applied to Supabase. Otherwise: Supabase Realtime (RLS), idempotent sends, optimistic UI, reconnect resync, pagination, Web Audio chime, browser notifications, mute, cross-tab dedupe |
+| 37 | **Realtime & notifications** | COMPLETED | Migration 1200 (Realtime DELETE events leaked chat UUIDs across companies) applied; live isolation test 4 / 4 (final audit 2026-11-15). Also: Supabase Realtime (RLS), idempotent sends, optimistic UI, reconnect resync, pagination, Web Audio chime, browser notifications, mute, cross-tab dedupe |
 | 38 | **Attachments** | COMPLETED | Images (preview), PDF/Office/CSV/ZIP, 25 MB limit, private bucket, participant-only access |
 | 39 | **Announcements** | COMPLETED | Company/department targeting, pin, attachments, acknowledgement tracking, notifications |
 | — | Dark mode | COMPLETED | Light / dark / system toggle in the header, persisted per browser; light remains the default (added 2026-11-15) |

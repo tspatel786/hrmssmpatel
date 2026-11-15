@@ -8,7 +8,7 @@
 | Unit | `npx vitest run tests/unit` | Open-redirect guard, CSV formula-injection escaping, amount-in-words |
 | Database (PGlite) | `npx vitest run tests/db` | The **real migrations** in Postgres 18 WASM through the same adapter the app uses, with RLS enforced per call |
 | Live Supabase | `npm run test:live` | Real Auth + PostgREST + Storage RLS + deployed Edge Function on the configured project (opt-in, self-cleaning) |
-| E2E (demo) | `npm run test:e2e` | Playwright against the demo build: full hiring lifecycle through the UI, roles, navigation, mobile layout |
+| E2E (demo) | `npm run test:e2e` | Playwright against the demo build: full hiring lifecycle through the UI, roles, navigation; layout at desktop, mobile (Pixel 7) and tablet (768 × 1024). CI: `--project=desktop --project=mobile --project=tablet` |
 | Live Realtime | `SUPABASE_LIVE=1 npx vitest run tests/supabase/realtime.test.ts` | Websocket delivery to participants, typing/receipt/reaction propagation, no cross-company payloads (incl. DELETE events) |
 | E2E (Supabase) | `SUPABASE_LIVE=1 npx playwright test --project=supabase` | Multiple browser contexts, real Realtime: DMs, groups (+photo), sound, browser notifications, receipts, typing, presence, reactions, pins, files, search, mute, multi-tab dedupe, announcements, mobile chat layout, UI isolation |
 
@@ -32,6 +32,12 @@
   interview reminders (once per scheduled time, re-armed on reschedule, service-role only), offer templates (default,
   permissions, same-company enforcement).
 
+- `isolation_catalog.test.ts` — catalog-wide audit: RLS on **every** public table, every view `security_invoker`, an admin of
+  another company and anonymous visitors see **zero** victim rows in every table/view with `company_id` (66 relations, 55 with
+  seeded data), only `company-assets` is a public bucket, no private object readable cross-company, Realtime publication holds
+  exactly the 4 tables that never broadcast cross-tenant DELETE events (migration 1200).
+- `roles_matrix.test.ts` — locks the 7 built-in roles to the documented permission matrix (32 keys).
+
 ## Unit (`tests/unit`)
 - `pdf.test.ts` — offer-template placeholder rendering, template vs standard offer letter, paginated report PDF.
 
@@ -43,7 +49,8 @@
 ## Test data & safety
 - Tests use isolated databases (PGlite) or pre-confirmed admin-created users with random suffixes on the dedicated
   `talentflow-hrms` project, and delete everything they create. No production data is touched.
-- No real emails are sent: the Edge Function runs in `mock` mode and test users are created without confirmation mail.
+- No real emails are sent by tests: the live test that invokes the email worker runs only with `LIVE_EMAIL_MODE=mock`
+  (the project now uses a real provider), and test users are created without confirmation mail.
 
 ## Results
 See UAT_REPORT.md for the latest run.
