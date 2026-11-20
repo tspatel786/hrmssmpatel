@@ -20,7 +20,8 @@ const ANON = process.env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 const keyFile = path.join(root, 'supabase/.temp/service-role-key');
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || (fs.existsSync(keyFile) ? fs.readFileSync(keyFile, 'utf8').trim() : '');
 const live = process.env.SUPABASE_LIVE === '1' && !!URL_ && !!ANON && !!SERVICE;
-const run = Date.now().toString(36);
+// prefixed so it cannot collide with live.test.ts (same hr.<run> address) when vitest starts both files in the same millisecond
+const run = `r15${Date.now().toString(36)}`;
 const PASSWORD = `Live-${run}-Pw1`;
 const admin = live ? createClient(URL_, SERVICE, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } }) : (null as unknown as SupabaseClient);
 const userIds: string[] = [];
