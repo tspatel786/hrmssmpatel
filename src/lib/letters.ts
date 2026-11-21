@@ -1,7 +1,7 @@
 // Letters on the company letterhead: offer letters (OfferDetail) and appointment letters (on joining).
 import type { Company } from '@/contexts/session';
 import { api } from '@/lib/backend';
-import { generateAppointmentPdf, loadLetterhead, type PdfCompany } from '@/lib/pdf';
+import { generateAppointmentPdf, generateExitLetterPdf, loadLetterhead, type PdfCompany } from '@/lib/pdf';
 
 const cache = new Map<string, Promise<PdfCompany['letterhead']>>();
 
@@ -39,5 +39,23 @@ export async function issueAppointmentLetter(employeeId: string, company: Compan
   const path = `${e.company_id}/employees/${e.id}/appointment-letter-${Date.now()}.pdf`;
   await api.storage.upload('documents', path, new File([pdf], fileName, { type: 'application/pdf' }), 'application/pdf');
   await api.db.rpc('send_appointment_letter', { p_employee: e.id, p_path: path, p_file_name: fileName });
+  void api.processEmails();
+}
+
+/** Relieving / experience letter: PDF on the letterhead, stored in the employee documents and emailed (send_exit_letter). */
+export async function issueExitLetter(employeeId: string, kind: 'relieving_letter' | 'experience_letter', company: Company,
+  dates: { last_working_day: string; resigned_on?: string | null }): Promise<void> {
+  const { rows } = await api.db.list<EmpRow>({ table: 'v_employees', filters: [{ column: 'id', op: 'eq', value: employeeId }], count: false });
+  const e = rows[0];
+  if (!e) throw new Error('Employee not found');
+  const pdf = generateExitLetterPdf({
+    kind, employee_code: e.employee_code, employee_name: e.full_name, designation: e.designation_title, department: e.department_name,
+    joining_date: e.joining_date, last_working_day: dates.last_working_day, resigned_on: dates.resigned_on, company: await pdfCompany(company),
+  });
+  const label = kind === 'relieving_letter' ? 'Relieving letter' : 'Experience letter';
+  const fileName = `${label} - ${e.employee_code}.pdf`;
+  const path = `${e.company_id}/employees/${e.id}/${kind.replace('_', '-')}-${Date.now()}.pdf`;
+  await api.storage.upload('documents', path, new File([pdf], fileName, { type: 'application/pdf' }), 'application/pdf');
+  await api.db.rpc('send_exit_letter', { p_employee: e.id, p_path: path, p_kind: kind, p_file_name: fileName });
   void api.processEmails();
 }

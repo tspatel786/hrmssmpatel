@@ -377,6 +377,55 @@ export function generateAppointmentPdf(a: AppointmentPdfData): Blob {
   return doc.output('blob');
 }
 
+export interface ExitLetterPdfData {
+  kind: 'relieving_letter' | 'experience_letter';
+  employee_code: string;
+  employee_name: string;
+  designation?: string | null;
+  department?: string | null;
+  joining_date: string;
+  last_working_day: string;
+  resigned_on?: string | null;
+  issued_at?: string | null;
+  company: PdfCompany;
+}
+
+/** Relieving or experience letter on the company letterhead. */
+export function generateExitLetterPdf(x: ExitLetterPdfData): Blob {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const c = x.company;
+  const org = c.legal_name || c.name;
+  const role = x.designation || 'a member of our team';
+  const relieving = x.kind === 'relieving_letter';
+  const start = header(doc, c, relieving ? 'Relieving Letter' : 'Experience Certificate');
+  const k = new Cursor(doc, start, c.letterhead);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Ref: ${relieving ? 'REL' : 'EXP'}/${x.employee_code}`, 40, k.y);
+  doc.text(`Date: ${fmtDate(x.issued_at ?? new Date())}`, doc.internal.pageSize.getWidth() - 40, k.y, { align: 'right' });
+  k.y += 28;
+  if (relieving) {
+    k.para(x.employee_name, { bold: true, gap: 0 });
+    k.para(`Employee ID: ${x.employee_code}`, { size: 9.5, gap: 14 });
+    k.para(`Dear ${x.employee_name.split(' ')[0]},`, { bold: true });
+    k.para(`This is with reference to your resignation${x.resigned_on ? ` dated ${fmtDate(x.resigned_on)}` : ''}. We hereby accept your resignation and confirm that you are relieved from your duties at ${org} with effect from the close of working hours on ${fmtDate(x.last_working_day)}.`);
+    k.para(`You worked with us as ${role}${x.department ? ` in the ${x.department} department` : ''} from ${fmtDate(x.joining_date)} to ${fmtDate(x.last_working_day)}. Your exit formalities, including the return of company assets and the final settlement, have been completed.`);
+    k.para('We remind you that your obligations regarding confidentiality of company and client information continue after your employment.');
+    k.para('We thank you for your contributions and wish you success in your future endeavours.', { gap: 16 });
+  } else {
+    k.para('TO WHOMSOEVER IT MAY CONCERN', { bold: true, size: 11.5, gap: 14 });
+    k.para(`This is to certify that ${x.employee_name} (Employee ID: ${x.employee_code}) was employed with ${org} as ${role}${x.department ? ` in the ${x.department} department` : ''} from ${fmtDate(x.joining_date)} to ${fmtDate(x.last_working_day)}.`);
+    k.para(`During this period we found ${x.employee_name.split(' ')[0]} to be sincere, hardworking and professional. Their conduct with colleagues and clients was good.`);
+    k.para('We wish them every success in their future career.', { gap: 16 });
+  }
+  k.ensure(100);
+  k.para(`For ${org}`, { bold: true, gap: 30 });
+  k.para('Authorised Signatory', { size: 9.5 });
+  footer(doc, `${relieving ? 'REL' : 'EXP'}/${x.employee_code}`, c.letterhead);
+  return doc.output('blob');
+}
+
 export interface PayslipPdfData {
   period_year: number;
   period_month: number;

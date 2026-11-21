@@ -20,6 +20,9 @@ const OfferResponse = l(() => import('./pages/public/OfferResponse'), 'OfferResp
 const JoiningDocuments = l(() => import('./pages/public/JoiningDocuments'), 'JoiningDocuments');
 const ActivateAccount = l(() => import('./pages/auth/Auth'), 'ActivateAccount');
 const InternalOpenings = l(() => import('./pages/app/recruitment/InternalOpenings'), 'InternalOpenings');
+const Exits = l(() => import('./pages/app/exits/Exits'), 'Exits');
+const ExitDetail = l(() => import('./pages/app/exits/Exits'), 'ExitDetail');
+const Documents = l(() => import('./pages/app/Documents'), 'Documents');
 const Dashboard = l(() => import('./pages/app/Dashboard'), 'Dashboard');
 const Requisitions = l(() => import('./pages/app/recruitment/Requisitions'), 'Requisitions');
 const Jobs = l(() => import('./pages/app/recruitment/Jobs'), 'Jobs');
@@ -75,6 +78,9 @@ export default function App() {
           <Route path="communication" element={<Communication />} />
           <Route path="profile" element={<Profile />} />
           <Route path="openings" element={<InternalOpenings />} />
+          <Route path="exits" element={<Exits />} />
+          <Route path="exits/:id" element={<ExitDetail />} />
+          <Route path="documents" element={<Documents />} />
           <Route path="recruitment/requisitions" element={<P perm={['requisitions.view', 'requisitions.manage', 'requisitions.approve']}><Requisitions /></P>} />
           <Route path="recruitment/jobs" element={<P perm={['jobs.view', 'jobs.manage']}><Jobs /></P>} />
           <Route path="recruitment/jobs/:id" element={<P perm={['jobs.view', 'jobs.manage', 'candidates.view']}><JobDetail /></P>} />

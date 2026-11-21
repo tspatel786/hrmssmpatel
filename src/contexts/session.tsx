@@ -48,6 +48,7 @@ export interface Company {
   pf_percent: number;
   professional_tax: number;
   tds_percent: number;
+  notice_period_days?: number;
   email_from_name: string | null;
   email_reply_to: string | null;
   status: string;

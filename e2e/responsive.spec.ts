@@ -25,7 +25,7 @@ test('mobile: public pages and app shell render without horizontal overflow', as
   await page.getByRole('button', { name: 'Open menu' }).click();
   await page.getByRole('link', { name: 'Employees' }).click();
   await expect(page.getByRole('heading', { name: 'Employees' })).toBeVisible();
-  for (const path of ['/app/employees', '/app/recruitment/candidates', '/app/recruitment/interviews', '/app/leave', '/app/attendance', '/app/payroll', '/app/reports', '/app/communication', '/app/settings']) {
+  for (const path of ['/app/employees', '/app/recruitment/candidates', '/app/recruitment/interviews', '/app/leave', '/app/attendance', '/app/payroll', '/app/reports', '/app/communication', '/app/settings', '/app/documents', '/app/exits', '/app/openings']) {
     await nav(page, path);
     await page.waitForTimeout(1200);
     await expect(page.getByText('Could not load data')).toHaveCount(0);

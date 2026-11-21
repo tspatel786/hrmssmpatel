@@ -216,6 +216,7 @@ export async function deliverQueuedEmails(pg: PGlite): Promise<number> {
   const svc: Claims = { role: 'service_role' };
   let total = 0;
   // interview reminders (24 h ahead) are queued by the same worker run, like the Supabase edge function does
+  await runAs(pg, svc, (tx) => tx.query('select public.run_daily_jobs()')).catch(() => undefined);
   await runAs(pg, svc, (tx) => tx.query('select public.send_interview_reminders()')).catch(() => undefined);
   for (let i = 0; i < 20; i++) {
     const batch = await runAs(pg, svc, async (tx) => (await tx.query<{ id: string }>('select id from public.claim_email_batch(50)')).rows);

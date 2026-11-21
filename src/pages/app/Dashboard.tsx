@@ -1,4 +1,4 @@
-import { Briefcase, CalendarCheck, CalendarDays, ClipboardEdit, Clock, FileSignature, LogIn, LogOut, Plane, UserPlus, Users, Wallet } from 'lucide-react';
+import { AlertTriangle, Briefcase, Cake, CalendarCheck, CalendarDays, ClipboardEdit, Clock, DoorOpen, FileSignature, FolderLock, LogIn, LogOut, Plane, UserMinus, UserPlus, Users, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, PageLoader, StatCard } from '@/components/ui';
@@ -150,6 +150,65 @@ function TeamCard({ companyId }: { companyId: string }) {
   );
 }
 
+interface MyOverview { documents: { total: number; pending: number; rejected: number; expiring: number }; resignation: { id: string; status: string; proposed_last_day: string; approved_last_day: string | null; withdrawal_requested: boolean } | null; pending_leave: number; team_resignations: number }
+const RESIGN_LABEL: Record<string, string> = { pending_manager: 'Waiting for manager', pending_hr: 'Waiting for HR', approved: 'Serving notice', completed: 'Exit completed', rejected: 'Rejected', withdrawn: 'Withdrawn' };
+
+/** Employee: documents, leave requests and resignation status; manager: resignations waiting for them (migration 2000). */
+function MyWorkspaceCard({ companyId }: { companyId: string }) {
+  const q = useRpc<MyOverview>('my_overview', { p_company: companyId });
+  const o = q.data;
+  if (!o || q.isError) return null;
+  const r = o.resignation;
+  const showResign = r && ['pending_manager', 'pending_hr', 'approved', 'completed'].includes(r.status);
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="my-workspace">
+      <Link to="/app/documents" className="block"><StatCard label="My documents" value={o.documents.total} icon={<FolderLock className="h-5 w-5" />} tone="blue"
+        hint={o.documents.rejected ? `${o.documents.rejected} need re-upload` : o.documents.pending ? `${o.documents.pending} awaiting verification` : o.documents.expiring ? `${o.documents.expiring} expiring soon` : 'All verified'} /></Link>
+      <Link to="/app/leave" className="block"><StatCard label="My pending leave" value={o.pending_leave} icon={<Plane className="h-5 w-5" />} tone="amber" hint="Waiting for approval" /></Link>
+      {o.team_resignations > 0 && <Link to="/app/exits?tab=team" className="block"><StatCard label="Team resignations" value={o.team_resignations} icon={<UserMinus className="h-5 w-5" />} tone="rose" hint="Waiting for your decision" /></Link>}
+      {showResign && r && <Link to={`/app/exits/${r.id}`} className="block"><StatCard label="My resignation" value={RESIGN_LABEL[r.status] ?? r.status} icon={<DoorOpen className="h-5 w-5" />} tone="violet"
+        hint={`Last day ${fmtDate(r.approved_last_day ?? r.proposed_last_day)}${r.withdrawal_requested ? ' · cancellation requested' : ''}`} /></Link>}
+    </div>
+  );
+}
+
+interface HrOverview {
+  total_employees: number; present_today: number; on_leave_today: number; absent_today: number; working_day: boolean; pending_leave: number;
+  pending_resignations: number; on_notice: number; documents_to_verify: number;
+  birthdays: { id: string; name: string; date: string }[]; expiring_documents: { id: string; employee_id: string; employee_name: string; file_name: string; expiry_date: string }[];
+}
+
+/** HR: today's people numbers, approvals, birthdays and document expiry alerts (migration 2000). */
+function HrOverviewCard({ companyId }: { companyId: string }) {
+  const q = useRpc<HrOverview>('hr_overview', { p_company: companyId });
+  const o = q.data;
+  if (!o || q.isError) return null;
+  return (
+    <div data-testid="hr-overview"><Card title="People today">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Employees" value={o.total_employees} icon={<Users className="h-5 w-5" />} hint={`${o.on_notice} serving notice`} />
+        <Link to="/app/attendance?tab=register" className="block"><StatCard label="Present today" value={o.present_today} icon={<CalendarCheck className="h-5 w-5" />} tone="green" hint={o.working_day ? `${o.absent_today} not in / absent · ${o.on_leave_today} on leave` : 'Not a working day'} /></Link>
+        <Link to="/app/leave?tab=approvals" className="block"><StatCard label="Pending leave" value={o.pending_leave} icon={<Plane className="h-5 w-5" />} tone="amber" hint="Requests to decide" /></Link>
+        <Link to="/app/exits?tab=pending" className="block"><StatCard label="Pending resignations" value={o.pending_resignations} icon={<UserMinus className="h-5 w-5" />} tone="rose" hint={`${o.documents_to_verify} document(s) to verify`} /></Link>
+      </div>
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <div>
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Cake className="h-4 w-4 text-brand-600" /> Birthdays (next 30 days)</p>
+          {o.birthdays.length === 0 ? <p className="text-sm text-slate-500">No upcoming birthdays.</p> : (
+            <ul className="divide-y divide-slate-100 text-sm">{o.birthdays.map((b) => <li key={b.id} className="flex justify-between py-1.5"><Link to={`/app/employees/${b.id}`} className="hover:underline">{b.name}</Link><span className="text-slate-500">{fmtDate(b.date, 'dd MMM')}</span></li>)}</ul>
+          )}
+        </div>
+        <div>
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-800"><AlertTriangle className="h-4 w-4 text-amber-600" /> Documents expiring (30 days)</p>
+          {o.expiring_documents.length === 0 ? <p className="text-sm text-slate-500">Nothing expiring.</p> : (
+            <ul className="divide-y divide-slate-100 text-sm">{o.expiring_documents.slice(0, 6).map((d) => <li key={d.id} className="flex justify-between gap-2 py-1.5"><Link to={`/app/employees/${d.employee_id}`} className="min-w-0 truncate hover:underline">{d.employee_name} · {d.file_name}</Link><span className="shrink-0 text-slate-500">{fmtDate(d.expiry_date)}</span></li>)}</ul>
+          )}
+        </div>
+      </div>
+    </Card></div>
+  );
+}
+
 export function Dashboard() {
   const { companyId, company, can } = useCompany();
   const { user } = useSession();
@@ -174,7 +233,9 @@ export function Dashboard() {
         actions={can('jobs.manage') ? <Link to="/app/recruitment/jobs?new=1" className="btn-primary"><Briefcase className="h-4 w-4" /> Post a job</Link> : undefined} />
 
       {companyId && <SelfService companyId={companyId} />}
+      {companyId && <MyWorkspaceCard companyId={companyId} />}
       {companyId && <TeamCard companyId={companyId} />}
+      {companyId && can('employees.view') && <HrOverviewCard companyId={companyId} />}
 
       {canDash && (stats.isLoading ? <PageLoader /> : stats.isError ? <ErrorState error={stats.error} onRetry={() => stats.refetch()} /> : s && (
         <>

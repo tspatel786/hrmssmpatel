@@ -1,6 +1,6 @@
 import { format, startOfMonth } from 'date-fns';
 import clsx from 'clsx';
-import { BarChart3, Briefcase, CalendarCheck, Download, FileDown, FileSignature, Plane, Printer, Users, Wallet } from 'lucide-react';
+import { BarChart3, Briefcase, CalendarCheck, DoorOpen, Download, FileDown, FileSignature, FolderLock, Plane, Printer, Users, Wallet } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -33,6 +33,10 @@ const REPORTS: ReportDef[] = [
     run: (c, p) => api.db.rpc<Row[]>('report_attendance', { p_company: c, p_from: p.from, p_to: p.to }) },
   { key: 'leave', title: 'Leave summary', description: 'Allocated, used, pending and available leave by type.', icon: <Plane className="h-5 w-5" />, params: ['year'],
     run: (c, p) => api.db.rpc<Row[]>('report_leave', { p_company: c, p_year: Number(p.year) }) },
+  { key: 'exits', title: 'Employee exits', description: 'Resignations with last working day, approvals, settlement and tenure.', icon: <DoorOpen className="h-5 w-5" />, params: ['range'], money: ['settlement_amount'],
+    run: (c, p) => api.db.rpc<Row[]>('report_exits', { p_company: c, p_from: p.from, p_to: p.to }) },
+  { key: 'documents', title: 'Employee documents', description: 'Every employee document with verification status and expiry date.', icon: <FolderLock className="h-5 w-5" />, params: [],
+    run: (c) => api.db.rpc<Row[]>('report_documents', { p_company: c }) },
   { key: 'recruitment', title: 'Recruitment funnel', description: 'Applications, shortlists, interviews, offers and hires per job.', icon: <Briefcase className="h-5 w-5" />, params: ['range'],
     run: (c, p) => api.db.rpc<Row[]>('report_recruitment', { p_company: c, p_from: p.from, p_to: p.to }) },
   { key: 'offers', title: 'Offers report', description: 'All offers with status, CTC and response dates.', icon: <FileSignature className="h-5 w-5" />, params: ['range'], money: ['ctc_annual'],
