@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import {
-  BarChart3, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileSignature, FileText,
+  BarChart3, Bell, Briefcase, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileSignature, FileText,
   KanbanSquare, LayoutDashboard, LogOut, Mail, Menu, Network, Plane, Settings, ShieldCheck, UserCheck, UserCircle, Users,
   UsersRound, Wallet, X, History, Crown, Check, MessagesSquare, Moon, Monitor, Sun,
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { ChatProvider, useChat } from '@/contexts/chat';
 import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { config } from '@/lib/config';
+import { Logo } from '@/components/Logo';
 import { fmtRelative } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
 import { useTheme, type ThemePref } from '@/lib/theme';
@@ -89,12 +90,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { can, company, isSuperAdmin } = useCompany();
   const { unreadTotal } = useChat();
   return (
-    <div className="flex h-full flex-col bg-slate-900">
-      <Link to="/app" className="flex h-16 shrink-0 items-center gap-2.5 px-5" onClick={onNavigate}>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white shadow-lg shadow-brand-500/30">
-          <Building2 className="h-4 w-4" />
-        </span>
-        <span className="text-[15px] font-semibold text-white">TalentFlow</span>
+    <div className="flex h-full flex-col border-r border-brand-500/10 bg-ink">
+      <Link to="/app" className="flex h-16 shrink-0 items-center gap-2.5 border-b border-white/5 px-5" onClick={onNavigate}>
+        <Logo size={34} nameClassName="!text-[15px] text-white" />
         {config.mode === 'demo' && <Badge tone="yellow" className="ml-auto !py-0 text-[10px]">DEMO</Badge>}
       </Link>
       <nav className="scrollbar-thin flex-1 space-y-6 overflow-y-auto px-3 pb-6 pt-2" aria-label="Main navigation">

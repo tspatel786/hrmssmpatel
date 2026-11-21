@@ -1,7 +1,8 @@
-import { Building2, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { getBackend } from '@/lib/backend';
 import { config } from '@/lib/config';
+import { Logo } from '@/components/Logo';
 import { SessionProvider, CompanyProvider } from '@/contexts/session';
 
 /** Waits for the backend (Supabase client or in-browser Postgres) before rendering the app. */
@@ -31,14 +32,12 @@ export function AppBoot({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-to-b from-white to-slate-100 px-6 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-white shadow-lg shadow-brand-600/30">
-        <Building2 className="h-6 w-6" />
-      </span>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink bg-[radial-gradient(50%_40%_at_50%_30%,rgba(212,175,55,0.14),transparent)] px-6 text-center">
+      <Logo size={72} showName={false} />
       {state === 'loading' ? (
         <>
-          <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label="Loading" />
-          <p className="max-w-sm text-sm text-slate-500">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-400" aria-label="Loading" />
+          <p className="max-w-sm text-sm text-ink-muted">
             {config.mode === 'demo'
               ? 'Starting the demo workspace. The first launch sets up an in-browser database with sample data — this can take a few seconds.'
               : 'Connecting…'}
@@ -46,8 +45,8 @@ export function AppBoot({ children }: { children: ReactNode }) {
         </>
       ) : (
         <>
-          <p className="text-base font-semibold text-slate-900">The application could not start</p>
-          <p className="max-w-md text-sm text-slate-500">{error}</p>
+          <p className="text-base font-semibold text-white">The application could not start</p>
+          <p className="max-w-md text-sm text-ink-muted">{error}</p>
           <button type="button" className="btn-primary" onClick={() => { setState('loading'); setAttempt((a) => a + 1); }}>Retry</button>
         </>
       )}

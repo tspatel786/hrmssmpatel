@@ -1,4 +1,4 @@
-import { ArrowLeft, Building2, Crown, LogOut, Mail, Pencil, Plus, Users } from 'lucide-react';
+import { ArrowLeft, Building2, LogOut, Mail, Pencil, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -8,7 +8,8 @@ import { FormModal, type FieldDef } from '@/components/FormModal';
 import { Badge, Button, Card, ErrorState, PageHeader, PageLoader, StatCard } from '@/components/ui';
 import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
-import { appBaseUrl } from '@/lib/config';
+import { appBaseUrl, config } from '@/lib/config';
+import { Logo } from '@/components/Logo';
 import { opts, PLANS } from '@/lib/constants';
 import { fmtDate, slugify, titleCase } from '@/lib/format';
 import { useAction, useRpc, useTable } from '@/lib/hooks';
@@ -58,10 +59,10 @@ export function Admin() {
   ];
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-slate-900 text-white">
+      <header className="sticky top-0 z-20 border-b border-brand-500/15 bg-ink text-white">
         <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-3 px-4 sm:px-6 lg:px-8">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500"><Crown className="h-4 w-4" /></span>
-          <span className="font-semibold">TalentFlow Platform Admin</span>
+          <Logo size={34} showName={false} />
+          <span className="font-display font-semibold">{config.appName} <span className="text-brand-400">Platform Admin</span></span>
           <div className="ml-auto flex items-center gap-2">
             {companies.length > 0 && <Link to="/app" className="btn-ghost text-slate-300 hover:bg-white/10 hover:text-white"><ArrowLeft className="h-4 w-4" /> Company app</Link>}
             <button type="button" className="btn-ghost text-slate-300 hover:bg-white/10 hover:text-white" onClick={async () => { await signOut(); navigate('/login'); }}><LogOut className="h-4 w-4" /> Sign out</button>
@@ -81,7 +82,7 @@ export function Admin() {
         )}
         {s && s.signups_by_month.length > 0 && (
           <Card title="New companies by month" className="mb-5">
-            <div className="h-56"><ResponsiveContainer><BarChart data={s.signups_by_month} margin={{ left: -20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" /><XAxis dataKey="month" tick={{ fontSize: 12 }} /><YAxis allowDecimals={false} tick={{ fontSize: 12 }} /><Tooltip /><Bar dataKey="count" fill="#2549eb" radius={[4, 4, 0, 0]} name="Companies" /></BarChart></ResponsiveContainer></div>
+            <div className="h-56"><ResponsiveContainer><BarChart data={s.signups_by_month} margin={{ left: -20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" /><XAxis dataKey="month" tick={{ fontSize: 12 }} /><YAxis allowDecimals={false} tick={{ fontSize: 12 }} /><Tooltip /><Bar dataKey="count" fill="#d4af37" radius={[4, 4, 0, 0]} name="Companies" /></BarChart></ResponsiveContainer></div>
           </Card>
         )}
         <DataTable table={table} columns={columns} searchPlaceholder="Search companies" exportName="companies"

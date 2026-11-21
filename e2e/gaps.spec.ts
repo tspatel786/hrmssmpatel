@@ -191,7 +191,7 @@ test('dark mode renders the main app pages legibly', async () => {
       const h = document.querySelector('h1, h2');
       return { bg, color: h ? getComputedStyle(h).color : '' };
     });
-    expect(ok.bg).toBe('rgb(2, 6, 23)');
+    expect(ok.bg).toBe('rgb(5, 5, 5)'); // brand black (#050505), as on smpatelithub.in
     expect(ok.color).not.toBe('rgb(15, 23, 42)'); // not dark slate on dark background
   }
   expect(errors, errors.join('\n')).toEqual([]);

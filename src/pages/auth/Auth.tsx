@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Building2, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { forwardRef, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { Logo } from '@/components/Logo';
 import { Button, Field, Input } from '@/components/ui';
 import { useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
@@ -13,24 +14,18 @@ import { config, DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/config';
 function AuthShell({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="flex min-h-screen">
-      <div className="relative hidden w-[44%] flex-col justify-between overflow-hidden bg-slate-900 p-12 text-white lg:flex">
-        <div className="absolute inset-0 bg-[radial-gradient(70%_60%_at_20%_10%,rgba(59,103,246,0.45),transparent)]" />
-        <Link to="/" className="relative flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500"><Building2 className="h-5 w-5" /></span>
-          <span className="text-lg font-semibold">TalentFlow HRMS</span>
-        </Link>
+      <div className="relative hidden w-[44%] flex-col justify-between overflow-hidden border-r border-brand-500/15 bg-ink p-12 text-white lg:flex">
+        <div className="absolute inset-0 bg-[radial-gradient(70%_60%_at_20%_10%,rgba(212,175,55,0.22),transparent)]" />
+        <Link to="/" className="relative"><Logo size={48} nameClassName="text-white" /></Link>
         <div className="relative">
-          <p className="text-3xl font-semibold leading-snug">“We cut our time-to-hire in half and onboard new joiners in a single afternoon.”</p>
-          <p className="mt-4 text-sm text-slate-300">Recruitment · Onboarding · Attendance · Leave · Payroll</p>
+          <p className="font-display text-3xl font-semibold leading-snug">“We cut our time-to-hire in half and onboard new joiners in <span className="text-gold-gradient">a single afternoon.</span>”</p>
+          <p className="mt-4 text-sm text-ink-muted">Recruitment · Onboarding · Attendance · Leave · Payroll</p>
         </div>
-        <p className="relative text-xs text-slate-400">Secured with row-level multi-tenant isolation.</p>
+        <p className="relative text-xs text-ink-muted">Enterprise HRMS by {config.companyName} · Secured with row-level multi-tenant isolation.</p>
       </div>
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          <Link to="/" className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white"><Building2 className="h-4 w-4" /></span>
-            <span className="font-semibold">TalentFlow HRMS</span>
-          </Link>
+          <Link to="/" className="mb-8 block lg:hidden"><Logo size={40} /></Link>
           <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
           {subtitle && <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>}
           <div className="mt-8">{children}</div>

@@ -66,7 +66,7 @@ export function OfferResponse() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="text-white" style={{ background: o.company.primary_color ?? '#2549eb' }}>
+      <header className="text-white" style={{ background: o.company.primary_color ?? '#050505' }}>
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-5">
           {o.company.logo_url ? <img src={o.company.logo_url} alt="" className="h-10 w-10 rounded-lg bg-white object-cover" /> : <Building2 className="h-8 w-8" />}
           <div>

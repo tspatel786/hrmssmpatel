@@ -93,7 +93,7 @@ export function Reports() {
           {visible.map((r) => (
             <button key={r.key} type="button" onClick={() => setActive(r)}
               className={clsx('flex w-full items-start gap-3 rounded-xl border p-3 text-left transition', active.key === r.key ? 'border-brand-300 bg-brand-50' : 'border-transparent hover:bg-white')}>
-              <span className={clsx('mt-0.5 rounded-lg p-1.5', active.key === r.key ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500')}>{r.icon}</span>
+              <span className={clsx('mt-0.5 rounded-lg p-1.5', active.key === r.key ? 'bg-brand-500 text-ink' : 'bg-slate-100 text-slate-500')}>{r.icon}</span>
               <span><span className="block text-sm font-semibold text-slate-900">{r.title}</span><span className="block text-xs text-slate-500">{r.description}</span></span>
             </button>
           ))}

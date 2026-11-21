@@ -101,7 +101,7 @@ export function Interviews() {
               const ev = byDay(d);
               return (
                 <div key={d.toISOString()} className={clsx('min-h-[96px] border-b border-r border-slate-100 p-1.5', !isSameMonth(d, cursor) && 'bg-slate-50/60')}>
-                  <div className={clsx('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isSameDay(d, new Date()) ? 'bg-brand-600 font-semibold text-white' : isSameMonth(d, cursor) ? 'text-slate-700' : 'text-slate-400')}>{format(d, 'd')}</div>
+                  <div className={clsx('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isSameDay(d, new Date()) ? 'bg-brand-500 font-semibold text-ink' : isSameMonth(d, cursor) ? 'text-slate-700' : 'text-slate-400')}>{format(d, 'd')}</div>
                   <div className="space-y-1">
                     {ev.slice(0, 3).map((i) => <Event key={i.id} i={i} />)}
                     {ev.length > 3 && <button type="button" className="text-[11px] font-medium text-brand-700" onClick={() => { setCursor(d); setView('week'); }}>+{ev.length - 3} more</button>}

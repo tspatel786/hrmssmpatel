@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Building2, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import { Logo } from '@/components/Logo';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
@@ -46,7 +47,7 @@ export function CreateCompany() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex items-center justify-between">
-          <span className="flex items-center gap-2 font-semibold"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white"><Building2 className="h-4 w-4" /></span> TalentFlow HRMS</span>
+          <Logo size={36} nameClassName="text-base" />
           <button type="button" className="btn-ghost text-sm" onClick={async () => { await signOut(); navigate('/login'); }}><LogOut className="h-4 w-4" /> Sign out</button>
         </div>
         <div className="card p-8">

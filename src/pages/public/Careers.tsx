@@ -7,6 +7,7 @@ import { Link, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Badge, Button, EmptyState, ErrorState, Field, Input, PageLoader, Pagination, Select, Textarea } from '@/components/ui';
 import { api } from '@/lib/backend';
+import { config } from '@/lib/config';
 import { RESUME_MIME } from '@/lib/constants';
 import { fileSize, fmtMoney, fmtRelative, titleCase } from '@/lib/format';
 
@@ -41,7 +42,7 @@ function CareersShell({ company, children }: { company: PublicCompany; children:
         </div>
       </header>
       {children}
-      <footer className="py-10 text-center text-xs text-slate-400">Powered by TalentFlow HRMS · Your data is processed only for recruitment purposes.</footer>
+      <footer className="py-10 text-center text-xs text-slate-400">Powered by {config.appName} · Your data is processed only for recruitment purposes.</footer>
     </div>
   );
 }

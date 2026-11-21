@@ -103,7 +103,7 @@ export async function requestBrowserPermission(): Promise<NotificationPermission
 export function showBrowserNotification(title: string, body: string, tag: string, onClick: () => void) {
   if (!browserNotificationsSupported() || Notification.permission !== 'granted') return;
   try {
-    const n = new Notification(title, { body, tag, icon: '/favicon.svg' });
+    const n = new Notification(title, { body, tag, icon: '/logo-mark.png' });
     n.onclick = () => {
       window.focus();
       onClick();

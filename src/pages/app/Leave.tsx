@@ -199,7 +199,7 @@ function LeaveTypes({ companyId }: { companyId: string }) {
         </tbody></table></div>
       )}
       <FormModal open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add leave type' : 'Edit leave type'} size="md" schema={typeSchema} fields={fields}
-        defaultValues={(editing && editing !== 'new' ? editing : { is_paid: true, carry_forward: false, is_active: true, color: '#2549eb', annual_quota: 0 }) as never} onSubmit={(v) => save.mutateAsync(v)} />
+        defaultValues={(editing && editing !== 'new' ? editing : { is_paid: true, carry_forward: false, is_active: true, color: '#d4af37', annual_quota: 0 }) as never} onSubmit={(v) => save.mutateAsync(v)} />
       <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} title="Delete leave type?" tone="danger" confirmLabel="Delete" loading={remove.isPending}
         message="Types already used in requests cannot be deleted — deactivate them instead." onConfirm={() => deleting && remove.mutate(deleting.id)} />
     </Card>

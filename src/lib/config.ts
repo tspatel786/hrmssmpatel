@@ -7,7 +7,9 @@ export const config = {
   supabaseAnonKey: anonKey,
   mode: (forced === 'demo' || forced === 'supabase' ? forced : url && anonKey ? 'supabase' : 'demo') as 'supabase' | 'demo',
   publicAppUrl: ((import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim() || '').replace(/\/$/, ''),
-  appName: 'TalentFlow HRMS',
+  appName: 'S.M.PATEL HRMS',
+  companyName: 'S.M.PATEL IT HUB',
+  companyUrl: 'https://www.smpatelithub.in',
 };
 
 export function appBaseUrl(): string {

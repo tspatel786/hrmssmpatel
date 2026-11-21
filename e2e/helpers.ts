@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 export const DEMO_PASSWORD = 'Demo@12345';
 
@@ -16,8 +16,12 @@ export function trackErrors(page: Page) {
 
 /** First visit boots the in-browser Postgres and seeds demo data (one-time per browser context). */
 export async function bootDemo(page: Page) {
+  // Seeding runs every migration plus the demo workflows in WASM Postgres: ~60-70 s on a typical machine, and well past
+  // 120 s late in a long run under load (the cause of the old "stuck on Starting the demo workspace" failures).
+  // Give the boot its own budget and extend the calling test by the same amount so its own steps keep theirs.
+  test.info().setTimeout(test.info().timeout + 240_000);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Hire, onboard and pay your people/ })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole('heading', { name: /Hire, onboard and pay your people/ })).toBeVisible({ timeout: 240_000 });
 }
 
 export async function login(page: Page, email: string, password = DEMO_PASSWORD) {

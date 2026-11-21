@@ -36,7 +36,7 @@ interface MyDash {
   my_interviews: { id: string; at: string; round: string; candidate: string; job: string; feedback_submitted: boolean }[];
 }
 
-const PALETTE = ['#2549eb', '#0891b2', '#7c3aed', '#059669', '#ea580c', '#e11d48', '#d97706', '#4f46e5'];
+const PALETTE = ['#d4af37', '#0891b2', '#7c3aed', '#059669', '#ea580c', '#e11d48', '#d97706', '#4f46e5'];
 
 function greeting() {
   const h = new Date().getHours();
@@ -196,12 +196,12 @@ export function Dashboard() {
                 <div className="h-64">
                   <ResponsiveContainer>
                     <AreaChart data={s.applications_trend} margin={{ left: -20, right: 8, top: 8 }}>
-                      <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2549eb" stopOpacity={0.25} /><stop offset="100%" stopColor="#2549eb" stopOpacity={0} /></linearGradient></defs>
+                      <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d4af37" stopOpacity={0.25} /><stop offset="100%" stopColor="#d4af37" stopOpacity={0} /></linearGradient></defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
                       <XAxis dataKey="week" tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} />
                       <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                      <Area type="monotone" dataKey="count" name="Applications" stroke="#2549eb" strokeWidth={2} fill="url(#g1)" />
+                      <Area type="monotone" dataKey="count" name="Applications" stroke="#b8932a" strokeWidth={2} fill="url(#g1)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

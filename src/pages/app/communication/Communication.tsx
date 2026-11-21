@@ -376,7 +376,7 @@ export function Communication() {
                             {c.last_message_body ? `${c.last_message_sender === user?.id ? 'You: ' : c.type === 'group' && c.last_message_sender_name ? `${c.last_message_sender_name.split(' ')[0]}: ` : ''}${c.last_message_body}` : c.last_message_has_attachments ? '📎 Attachment' : 'No messages yet'}
                           </span>
                           {c.muted && <BellOff className="h-3 w-3 shrink-0 text-slate-400" aria-label="Muted" />}
-                          {unread > 0 && <span className="ml-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold text-white" data-testid="unread-badge">{unread}</span>}
+                          {unread > 0 && <span className="ml-auto shrink-0 rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold text-ink" data-testid="unread-badge">{unread}</span>}
                         </span>
                       </span>
                     </button>
