@@ -160,15 +160,15 @@ function CompanySwitcher() {
   const navigate = useNavigate();
   if (!current) return null;
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative min-w-0" ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}
-        className="flex max-w-[220px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm hover:bg-slate-50">
+        className="flex w-full max-w-[220px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm hover:bg-slate-50">
         <Avatar name={current.name} size="xs" src={current.logo_url} />
         <span className="truncate font-medium text-slate-800">{current.name}</span>
         <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
       </button>
       {open && (
-        <div role="menu" className="animate-in absolute left-0 z-40 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-pop">
+        <div role="menu" className="animate-in absolute left-0 z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-1.5 shadow-pop">
           <p className="px-2.5 py-1.5 text-xs font-semibold uppercase text-slate-400">Your companies</p>
           {companies.map((c) => (
             <button key={c.id} role="menuitem" type="button" onClick={() => { switchCompany(c.id); setOpen(false); navigate('/app'); }}
@@ -318,9 +318,9 @@ export function AppLayout() {
       )}
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6">
-          <button type="button" className="btn-ghost p-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
+          <button type="button" className="btn-ghost shrink-0 p-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
           <CompanySwitcher />
-          <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             {company?.careers_enabled && (
               <a href={`/careers/${company.slug}`} target="_blank" rel="noreferrer" className="btn-ghost hidden text-xs sm:inline-flex">Careers page ↗</a>
             )}

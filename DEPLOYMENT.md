@@ -19,7 +19,10 @@ tables, and the old frontend (one Realtime channel for all chat tables) then rec
    node scripts/supabase-apply.mjs --only 20261115001200   # then run the 1200 verification + acceptance test
    node scripts/supabase-apply.mjs --only 20261115001300
    node scripts/supabase-apply.mjs --only 20261115001400
+   node scripts/supabase-apply.mjs --only 20261115001500   # role dashboards; then: npx vitest run tests/supabase/roles_1500.test.ts (SUPABASE_LIVE=1)
+   node scripts/supabase-apply.mjs --only 20261115001600   # invitation email subject names S.M.PATEL HRMS (customised subjects untouched)
    ```
+   Status 2026-11-21: 1200-1400 are applied to the live project; 1500 and 1600 are pending.
 4. Run the live tests (`npm run test:live`, `SUPABASE_LIVE=1 npx playwright test --project=supabase`).
 
 Rollback for this upgrade: see section 6. **Never roll the frontend back to a pre-1200 build while migration 1200 is

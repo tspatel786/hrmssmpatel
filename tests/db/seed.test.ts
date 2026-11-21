@@ -25,5 +25,9 @@ describe('Demo seed', () => {
     const [co] = await sql<{ id: string }>(pg, `select id from companies where slug = 'nimbus'`);
     const stats = await clientFor(pg, hr.id).rpc<{ headcount: number; open_jobs: number }>('dashboard_stats', { p_company: co.id });
     expect(stats).toMatchObject({ headcount: 14, open_jobs: 4 });
+    // migration 1600: invitation emails carry the current product name for every company
+    const subjects = await sql<{ subject: string }>(pg, `select subject from email_templates where key = 'user_invitation'`);
+    expect(subjects.length).toBe(2);
+    for (const s of subjects) expect(s.subject).toBe('You have been invited to {{company_name}} on S.M.PATEL HRMS');
   });
 });
