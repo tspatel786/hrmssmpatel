@@ -89,8 +89,10 @@ export function createDb(sb: SupabaseClient): DbApi {
 export function createStorage(sb: SupabaseClient): StorageApi {
   return {
     async upload(bucket, path, file, contentType) {
-      // anonymous careers uploads are insert-only (no upsert => no select/update policy needed)
-      const { error } = await sb.storage.from(bucket).upload(path, file, { contentType, upsert: bucket !== 'resumes' });
+      // anonymous uploads (careers resumes, joining documents) are insert-only to fresh paths: upsert would need a
+      // select/update policy the uploader must not have
+      const insertOnly = bucket === 'resumes' || (bucket === 'documents' && path.split('/')[1] === 'onboarding');
+      const { error } = await sb.storage.from(bucket).upload(path, file, { contentType, upsert: !insertOnly });
       if (error) throw friendlyError(error.message);
     },
     async download(bucket, path) {

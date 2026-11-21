@@ -59,7 +59,7 @@ describe.skipIf(!live)('Supabase live: lifecycle, isolation, storage', () => {
   const anonSb = live ? createClient(URL_, ANON, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } }) : (null as unknown as SupabaseClient);
   const anon = live ? createDb(anonSb) : (null as never);
   const anonStorage = live ? createStorage(anonSb) : (null as never);
-  let company = '', rivalCompany = '', job = '', app = '', interview = '', offer = '', token = '', onboarding = '', resumePath = '';
+  let company = '', rivalCompany = '', job = '', app = '', interview = '', offer = '', token = '', onboarding = '', resumePath = '', employee = '';
   const slug = `live-${run}`;
 
   beforeAll(async () => {
@@ -151,11 +151,43 @@ describe.skipIf(!live)('Supabase live: lifecycle, isolation, storage', () => {
     const ob = await hr.db.list<{ id: string }>({ table: 'onboardings', filters: [{ column: 'offer_id', op: 'eq', value: offer }] });
     onboarding = ob.rows[0].id;
     await hr.db.rpc('confirm_joining', { p_onboarding: onboarding, p_joining_date: isoDate(20) });
-    const emp = await hr.db.rpc<string>('complete_onboarding', { p_onboarding: onboarding, p_base_url: 'http://localhost:5173' });
-    const row = await hr.db.get<{ employee_code: string; email: string }>('employees', emp);
+    // migration 1900: the joiner uploads documents through the secret link (anonymous storage + RPC), HR verifies
+    await expect(hr.db.rpc('complete_onboarding', { p_onboarding: onboarding })).rejects.toThrow(/Verify the required documents/);
+    const [{ documents_token: docToken }] = (await hr.db.list<{ documents_token: string }>({ table: 'onboardings', filters: [{ column: 'id', op: 'eq', value: onboarding }] })).rows;
+    const portal = await anon.rpc<{ documents: { id: string; required: boolean }[] }>('public_onboarding_documents', { p_token: docToken });
+    for (const d of portal.documents.filter((x) => x.required)) {
+      const path = `${company}/onboarding/${onboarding}/${crypto.randomUUID()}/doc.pdf`;
+      await anonStorage.upload('documents', path, pdf(), 'application/pdf');
+      await anon.rpc('public_submit_onboarding_document', { p_token: docToken, p_document: d.id, p_file: { path, name: 'doc.pdf', mime: 'application/pdf', size: 900 } });
+      await hr.db.rpc('verify_onboarding_document', { p_document: d.id, p_approve: true });
+    }
+    await expect(rival.storage.download('documents', `${company}/onboarding/${onboarding}/x/doc.pdf`)).rejects.toThrow();
+    employee = await hr.db.rpc<string>('complete_onboarding', { p_onboarding: onboarding, p_base_url: 'http://localhost:5173' });
+    const row = await hr.db.get<{ employee_code: string; email: string }>('employees', employee);
     expect(row).toMatchObject({ employee_code: 'EMP-0001', email: `lena.${run}@example.com` });
     const stats = await hr.db.rpc<{ headcount: number }>('dashboard_stats', { p_company: company });
     expect(stats.headcount).toBe(1);
+  });
+
+  it('Employee ID + set-password link through the deployed employee-auth function, then sign-in with the Employee ID', async () => {
+    const { data: act } = await admin.from('employee_activations').select('token').eq('employee_id', employee).single();
+    await expect(hr.db.list({ table: 'employee_activations' })).rejects.toThrow(); // HR never sees the token
+    const pw = `Lena-${run}-9x`;
+    const { data: a, error: ae } = await anonSb.functions.invoke('employee-auth', { body: { action: 'activate', token: act!.token, password: pw } });
+    expect(ae).toBeNull();
+    expect(a.email).toBe(`lena.${run}@example.com`);
+    const { data: prof } = await admin.from('profiles').select('id').eq('email', a.email).single();
+    userIds.push(prof!.id);
+    const { data: again } = await anonSb.functions.invoke('employee-auth', { body: { action: 'activate', token: act!.token, password: pw } });
+    expect(again).toBeNull(); // one-time link
+    const { data: bad } = await anonSb.functions.invoke('employee-auth', { body: { action: 'login', employee_id: 'EMP-0001', password: 'wrong-pass-1' } });
+    expect(bad).toBeNull();
+    const { data: s, error: le } = await anonSb.functions.invoke('employee-auth', { body: { action: 'login', employee_id: 'emp-0001', password: pw } });
+    expect(le).toBeNull();
+    const lena = createClient(URL_, ANON, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } });
+    await lena.auth.setSession({ access_token: s.access_token, refresh_token: s.refresh_token });
+    const me = await createDb(lena).rpc<{ employee: { id: string } }>('my_dashboard', { p_company: company });
+    expect(me.employee.id).toBe(employee);
   });
 
   // Invoking the worker sends every queued email. With a real provider (EMAIL_MODE=resend) that would mail the
