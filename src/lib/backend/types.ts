@@ -53,6 +53,10 @@ export interface AuthApi {
   getUser(): Promise<AuthUser | null>;
   onChange(cb: (user: AuthUser | null) => void): () => void;
   signIn(email: string, password: string): Promise<AuthUser>;
+  /** Sign in with an Employee ID (e.g. EMP-0001) instead of an email (migration 1900). */
+  signInWithEmployeeId(employeeId: string, password: string): Promise<AuthUser>;
+  /** Use the one-time link from the Employee ID email to set a password; returns the login email. */
+  activateAccount(token: string, password: string): Promise<{ email: string }>;
   signUp(email: string, password: string, fullName: string): Promise<{ user: AuthUser | null; needsConfirmation: boolean }>;
   signOut(): Promise<void>;
   requestPasswordReset(email: string, redirectTo: string): Promise<void>;

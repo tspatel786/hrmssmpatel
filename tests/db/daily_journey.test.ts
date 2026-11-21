@@ -8,7 +8,7 @@
 // Also checks the role dashboards from migration 1500 (each role sees only its own metrics, manager sees the team).
 import type { PGlite } from '@electric-sql/pglite';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anonUpload, clientFor, createTestDb, createUser, sql, uploadAs } from './harness';
+import { anonUpload, clientFor, createTestDb, createUser, serviceClient, sql, uploadAs, verifyJoiningDocuments } from './harness';
 import { generatePayslipPdf } from '@/lib/pdf';
 
 let pg: PGlite;
@@ -183,14 +183,21 @@ describe('Daily operations journey (sign-up → daily work → sign-out)', () =>
     await hr.rpc('confirm_joining', { p_onboarding: onb.id, p_joining_date: isoDate(14) });
     const tasks = await hr.list<{ id: string }>({ table: 'onboarding_tasks', filters: [{ column: 'onboarding_id', op: 'eq', value: onb.id }] });
     for (const t of tasks.rows) await hr.update('onboarding_tasks', t.id, { is_completed: true });
+    await verifyJoiningDocuments(pg, ids.hr, onb.id);
     const newEmp = await hr.rpc<string>('complete_onboarding', { p_onboarding: onb.id, p_base_url: 'http://localhost:5173' });
     const [e] = await sql<{ email: string; department_id: string }>(pg, `select email, department_id from employees where id = $1`, [newEmp]);
     expect(e).toEqual({ email: 'nisha@example.com', department_id: ids.dept });
-    // HRMS access is automatic: the welcome email carries a sign-up link; signing up links the new hire as Employee
-    const welcome = await sql(pg, `select 1 from email_logs where company_id = $1 and template_key = 'welcome_employee' and to_email = 'nisha@example.com'`, [ids.company]);
+    // HRMS access: the credentials email carries the Employee ID and a one-time set-password link; the employee-auth
+    // edge function creates the account and consumes the token, which links the new hire as Employee
+    const welcome = await sql<{ id: string }>(pg, `select id from email_logs where company_id = $1 and template_key = 'employee_credentials' and to_email = 'nisha@example.com'`, [ids.company]);
     expect(welcome).toHaveLength(1);
+    const [{ token: activation }] = await sql<{ token: string }>(pg, 'select token from employee_activations where employee_id = $1', [newEmp]);
+    // HR can read employee records but never the one-time token
+    await expect(hr.list({ table: 'employee_activations' })).rejects.toThrow();
+    expect((await anon.rpc<{ status: string; employee_code: string }>('public_employee_activation', { p_token: activation })).status).toBe('valid');
     const nisha = await createUser(pg, 'nisha@example.com', 'Nisha Newhire');
-    expect(await clientFor(pg, nisha).rpc<number>('accept_my_invitations')).toBe(1);
+    expect(await serviceClient(pg).rpc<string>('consume_employee_activation', { p_token: activation, p_user: nisha })).toBe(ids.company);
+    expect((await anon.rpc<{ status: string }>('public_employee_activation', { p_token: activation })).status).toBe('invalid'); // token cleared
     const me = await clientFor(pg, nisha).rpc<{ employee: { id: string } }>('my_dashboard', { p_company: ids.company });
     expect(me.employee.id).toBe(newEmp);
     const [m] = await sql<{ role: string }>(pg, `select r.name role from company_members m join roles r on r.id = m.role_id where m.company_id = $1 and m.user_id = $2`, [ids.company, nisha]);

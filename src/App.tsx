@@ -17,6 +17,9 @@ const CreateCompany = l(() => import('./pages/auth/CreateCompany'), 'CreateCompa
 const CareersHome = l(() => import('./pages/public/Careers'), 'CareersHome');
 const CareersJob = l(() => import('./pages/public/Careers'), 'CareersJob');
 const OfferResponse = l(() => import('./pages/public/OfferResponse'), 'OfferResponse');
+const JoiningDocuments = l(() => import('./pages/public/JoiningDocuments'), 'JoiningDocuments');
+const ActivateAccount = l(() => import('./pages/auth/Auth'), 'ActivateAccount');
+const InternalOpenings = l(() => import('./pages/app/recruitment/InternalOpenings'), 'InternalOpenings');
 const Dashboard = l(() => import('./pages/app/Dashboard'), 'Dashboard');
 const Requisitions = l(() => import('./pages/app/recruitment/Requisitions'), 'Requisitions');
 const Jobs = l(() => import('./pages/app/recruitment/Jobs'), 'Jobs');
@@ -62,6 +65,8 @@ export default function App() {
         <Route path="/careers/:slug" element={<CareersHome />} />
         <Route path="/careers/:slug/jobs/:jobId" element={<CareersJob />} />
         <Route path="/offer/:token" element={<OfferResponse />} />
+        <Route path="/joining-documents/:token" element={<JoiningDocuments />} />
+        <Route path="/activate/:token" element={<ActivateAccount />} />
         <Route path="/admin" element={<Admin />} />
 
         <Route path="/app" element={<AppLayout />}>
@@ -69,6 +74,7 @@ export default function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="communication" element={<Communication />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="openings" element={<InternalOpenings />} />
           <Route path="recruitment/requisitions" element={<P perm={['requisitions.view', 'requisitions.manage', 'requisitions.approve']}><Requisitions /></P>} />
           <Route path="recruitment/jobs" element={<P perm={['jobs.view', 'jobs.manage']}><Jobs /></P>} />
           <Route path="recruitment/jobs/:id" element={<P perm={['jobs.view', 'jobs.manage', 'candidates.view']}><JobDetail /></P>} />

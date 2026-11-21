@@ -10,7 +10,7 @@ import { optDate, optId, optNum, optStr, reqNum, reqStr, tags } from '@/lib/sche
 export interface Job {
   id: string; company_id: string; requisition_id: string | null; title: string; department_id: string | null; department_name: string | null;
   designation_id: string | null; designation_title: string | null; location: string; employment_type: string; work_mode: string;
-  experience_min: number; experience_max: number | null; salary_min: number | null; salary_max: number | null; show_salary: boolean;
+  experience_min: number; experience_max: number | null; salary_min: number | null; salary_max: number | null; show_salary: boolean; internal_visible?: boolean;
   openings: number; description: string; responsibilities: string | null; requirements: string | null; benefits: string | null;
   skills: string[]; status: string; published_at: string | null; closing_date: string | null; hiring_manager_id: string | null;
   hiring_manager_name: string | null; applications_count: number; active_count: number; hired_count: number; created_at: string;
@@ -28,6 +28,7 @@ const schema = z.object({
   salary_min: optNum(),
   salary_max: optNum(),
   show_salary: z.boolean().default(false),
+  internal_visible: z.boolean().default(true),
   openings: reqNum(1, 500, 'Required'),
   hiring_manager_id: optId,
   closing_date: optDate,
@@ -68,6 +69,7 @@ export function JobForm({ open, onClose, job, prefill, onSaved }: {
     { name: 'salary_min', label: `Salary min (${company?.currency}/yr)`, type: 'number', min: 0 },
     { name: 'salary_max', label: `Salary max (${company?.currency}/yr)`, type: 'number', min: 0 },
     { name: 'show_salary', label: 'Show salary range on careers page', type: 'checkbox', span: 2 },
+    { name: 'internal_visible', label: 'Show to employees as an internal opening (everyone is emailed when it is published)', type: 'checkbox', span: 2 },
     { name: 'hiring_manager_id', label: 'Hiring manager', type: 'select', options: members.options },
     { name: 'closing_date', label: 'Closing date', type: 'date' },
     { name: 'status', label: 'Status', type: 'select', options: opts(['draft', 'published', 'on_hold', 'closed']), required: true, hint: 'Published jobs appear on your careers page' },
@@ -79,7 +81,7 @@ export function JobForm({ open, onClose, job, prefill, onSaved }: {
   ];
   const defaults = job
     ? { ...job, skills: job.skills ?? [] }
-    : { employment_type: 'full_time', work_mode: 'onsite', status: 'draft', openings: 1, experience_min: 0, location: company?.city || 'Head Office', show_salary: false, skills: [], ...prefill };
+    : { employment_type: 'full_time', work_mode: 'onsite', status: 'draft', openings: 1, experience_min: 0, location: company?.city || 'Head Office', show_salary: false, internal_visible: true, skills: [], ...prefill };
   return (
     <FormModal open={open} onClose={onClose} size="xl" title={job ? 'Edit job opening' : 'New job opening'} schema={schema} fields={fields}
       defaultValues={defaults as never} onSubmit={(v) => save.mutateAsync(v)} submitLabel={job ? 'Save changes' : 'Create job'} />

@@ -16,6 +16,51 @@ export interface PdfCompany {
   website?: string | null;
   primary_color?: string | null;
   currency?: string | null;
+  /** Company letterhead images (data URLs + pixel size), drawn full-width on every page of letters. */
+  letterhead?: Letterhead | null;
+}
+
+export interface LetterheadImage { data: string; width: number; height: number }
+export interface Letterhead { header?: LetterheadImage | null; footer?: LetterheadImage | null }
+
+/** Loads letterhead images (public URLs or data URLs) so jsPDF can embed them synchronously. */
+export async function loadLetterhead(headerUrl?: string | null, footerUrl?: string | null): Promise<Letterhead | null> {
+  const load = async (url?: string | null): Promise<LetterheadImage | null> => {
+    if (!url) return null;
+    try {
+      const blob = await (await fetch(url)).blob();
+      const data = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(blob); });
+      const size = await new Promise<{ width: number; height: number }>((res, rej) => { const i = new Image(); i.onload = () => res({ width: i.naturalWidth, height: i.naturalHeight }); i.onerror = rej; i.src = data; });
+      return { data, ...size };
+    } catch {
+      return null; // a missing image must never block a letter: fall back to the plain header
+    }
+  };
+  const [header, footer] = await Promise.all([load(headerUrl), load(footerUrl)]);
+  return header || footer ? { header, footer } : null;
+}
+
+const imgFormat = (data: string) => (/^data:image\/png/i.test(data) ? 'PNG' : 'JPEG');
+/** Heights (pt) the letterhead occupies at full page width. */
+function letterheadHeights(doc: jsPDF, lh?: Letterhead | null) {
+  const w = doc.internal.pageSize.getWidth();
+  return {
+    header: lh?.header ? (w * lh.header.height) / lh.header.width : 0,
+    footer: lh?.footer ? (w * lh.footer.height) / lh.footer.width : 0,
+  };
+}
+/** Draws the letterhead on every page; returns false when there is none (caller draws its own header/footer). */
+function drawLetterhead(doc: jsPDF, lh?: Letterhead | null): boolean {
+  if (!lh?.header && !lh?.footer) return false;
+  const w = doc.internal.pageSize.getWidth();
+  const h = doc.internal.pageSize.getHeight();
+  const { header, footer } = letterheadHeights(doc, lh);
+  for (let i = 1; i <= doc.getNumberOfPages(); i++) {
+    doc.setPage(i);
+    if (lh.header) doc.addImage(lh.header.data, imgFormat(lh.header.data), 0, 0, w, header, 'lh-header', 'FAST');
+    if (lh.footer) doc.addImage(lh.footer.data, imgFormat(lh.footer.data), 0, h - footer, w, footer, 'lh-footer', 'FAST');
+  }
+  return true;
 }
 
 export interface OfferPdfData {
@@ -69,7 +114,16 @@ function companyAddress(c: PdfCompany): string {
   return [c.address, c.city, c.state, c.postal_code, c.country].filter(Boolean).join(', ');
 }
 
-function header(doc: jsPDF, c: PdfCompany, title: string) {
+/** Returns the y where body text may start. */
+function header(doc: jsPDF, c: PdfCompany, title: string): number {
+  if (c.letterhead?.header || c.letterhead?.footer) {
+    const top = letterheadHeights(doc, c.letterhead).header + 30;
+    doc.setTextColor(30, 41, 59);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text(title, doc.internal.pageSize.getWidth() / 2, top, { align: 'center' });
+    return top + 22;
+  }
   const [r, g, b] = hexToRgb(c.primary_color);
   const w = doc.internal.pageSize.getWidth();
   doc.setFillColor(r, g, b);
@@ -86,33 +140,43 @@ function header(doc: jsPDF, c: PdfCompany, title: string) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.text(title, 40, 112);
+  return 134;
 }
 
-function footer(doc: jsPDF, text: string) {
+function footer(doc: jsPDF, text: string, lh?: Letterhead | null) {
   const pages = doc.getNumberOfPages();
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
+  const withLetterhead = drawLetterhead(doc, lh);
+  const base = withLetterhead ? h - letterheadHeights(doc, lh).footer - 8 : h - 26;
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
-    doc.setDrawColor(226, 232, 240);
-    doc.line(40, h - 40, w - 40, h - 40);
+    if (!withLetterhead) {
+      doc.setDrawColor(226, 232, 240);
+      doc.line(40, h - 40, w - 40, h - 40);
+    }
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
     doc.setFont('helvetica', 'normal');
-    doc.text(text, 40, h - 26);
-    doc.text(`Page ${i} of ${pages}`, w - 40, h - 26, { align: 'right' });
+    doc.text(text, 40, base);
+    doc.text(`Page ${i} of ${pages}`, w - 40, base, { align: 'right' });
   }
 }
 
 class Cursor {
   y: number;
-  constructor(private doc: jsPDF, start: number) {
+  private top: number;
+  private bottom: number;
+  constructor(private doc: jsPDF, start: number, lh?: Letterhead | null) {
     this.y = start;
+    const m = letterheadHeights(doc, lh);
+    this.top = m.header ? m.header + 24 : 50;
+    this.bottom = m.footer ? m.footer + 30 : 60;
   }
   ensure(space: number) {
-    if (this.y + space > this.doc.internal.pageSize.getHeight() - 60) {
+    if (this.y + space > this.doc.internal.pageSize.getHeight() - this.bottom) {
       this.doc.addPage();
-      this.y = 50;
+      this.y = this.top;
     }
   }
   para(text: string, opts: { size?: number; bold?: boolean; gap?: number } = {}) {
@@ -157,8 +221,8 @@ export function generateOfferPdf(o: OfferPdfData): Blob {
   const c = o.company;
   const cur = c.currency || 'INR';
   const t = o.template;
-  header(doc, c, t?.title?.trim() || 'Offer of Employment');
-  const cur2 = new Cursor(doc, 134);
+  const start = header(doc, c, t?.title?.trim() || 'Offer of Employment');
+  const cur2 = new Cursor(doc, start, c.letterhead);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(100, 116, 139);
@@ -222,7 +286,94 @@ export function generateOfferPdf(o: OfferPdfData): Blob {
     doc.text(`on ${fmtDate(o.responded_at, 'dd MMM yyyy, hh:mm a')} via secure offer link`, 52, cur2.y + 32);
     cur2.y += 60;
   }
-  footer(doc, `${o.offer_number} · Private & confidential`);
+  footer(doc, `${o.offer_number} · Private & confidential`, c.letterhead);
+  return doc.output('blob');
+}
+
+export interface AppointmentPdfData {
+  employee_code: string;
+  employee_name: string;
+  designation?: string | null;
+  department?: string | null;
+  reporting_manager?: string | null;
+  employment_type: string;
+  work_location?: string | null;
+  joining_date: string;
+  probation_end_date?: string | null;
+  ctc_annual: number;
+  basic_monthly: number;
+  hra_monthly: number;
+  allowances_monthly: number;
+  offer_number?: string | null;
+  issued_at?: string | null;
+  company: PdfCompany;
+}
+
+/** Appointment letter issued on joining (on the company letterhead when one is configured). */
+export function generateAppointmentPdf(a: AppointmentPdfData): Blob {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const c = a.company;
+  const cur = c.currency || 'INR';
+  const org = c.legal_name || c.name;
+  const role = a.designation || 'the position discussed';
+  const start = header(doc, c, 'Letter of Appointment');
+  const k = new Cursor(doc, start, c.letterhead);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Ref: APT/${a.employee_code}`, 40, k.y);
+  doc.text(`Date: ${fmtDate(a.issued_at ?? new Date())}`, doc.internal.pageSize.getWidth() - 40, k.y, { align: 'right' });
+  k.y += 24;
+  k.para(`${a.employee_name}`, { bold: true, gap: 0 });
+  k.para(`Employee ID: ${a.employee_code}`, { size: 9.5, gap: 12 });
+  k.para(`Dear ${a.employee_name.split(' ')[0]},`, { bold: true });
+  k.para(
+    `Further to your acceptance of our offer${a.offer_number ? ` (${a.offer_number})` : ''}, we are pleased to appoint you as ${role}` +
+      `${a.department ? ` in the ${a.department} department` : ''} at ${org} with effect from ${fmtDate(a.joining_date)}, on the terms and conditions set out below.`,
+  );
+  k.para('1. Appointment details', { bold: true, size: 11.5, gap: 2 });
+  k.table([
+    ['Employee ID', a.employee_code],
+    ['Designation', role],
+    ['Department', a.department || 'As assigned'],
+    ['Reporting to', a.reporting_manager || 'As communicated by HR'],
+    ['Employment type', titleCase(a.employment_type)],
+    ['Work location', a.work_location || 'As communicated by HR'],
+    ['Date of joining', fmtDate(a.joining_date)],
+    ['Probation', a.probation_end_date ? `Until ${fmtDate(a.probation_end_date)}` : 'Not applicable'],
+  ]);
+  k.para('2. Compensation', { bold: true, size: 11.5, gap: 2 });
+  const gross = Number(a.basic_monthly) + Number(a.hra_monthly) + Number(a.allowances_monthly);
+  k.table(
+    [
+      ['Basic salary', fmtMoneyPlain(a.basic_monthly, cur)],
+      ['House rent allowance (HRA)', fmtMoneyPlain(a.hra_monthly, cur)],
+      ['Other allowances', fmtMoneyPlain(a.allowances_monthly, cur)],
+      ['Gross monthly salary', fmtMoneyPlain(gross, cur)],
+      ['Annual cost to company (CTC)', fmtMoneyPlain(a.ctc_annual, cur)],
+    ],
+    { header: ['Component', 'Monthly / Annual'], boldLast: true },
+  );
+  k.para(`Annual CTC in words: ${cur} ${amountInWords(a.ctc_annual)} only. Salary is paid monthly after statutory deductions (PF, professional tax and income tax as applicable).`, { size: 9.5 });
+  k.para('3. Terms and conditions', { bold: true, size: 11.5, gap: 2 });
+  const terms = [
+    a.probation_end_date
+      ? `Probation: you will be on probation until ${fmtDate(a.probation_end_date)}. On satisfactory performance your employment will be confirmed in writing; the probation may be extended if required.`
+      : 'Confirmation: your employment is confirmed from the date of joining.',
+    'Working hours, attendance, holidays and leave are governed by the company policies in force from time to time, available in the HRMS.',
+    'Notice period: either party may end this employment by giving notice or salary in lieu of notice as per company policy. During probation the notice period is as per policy.',
+    'Confidentiality: you will keep all company, client and employee information confidential during and after your employment, and return all company property on leaving.',
+    'Conduct: you will follow the code of conduct, information-security and other policies of the company. Any breach may lead to disciplinary action.',
+    'Documents: this appointment is based on the documents and information you provided. Any of it being found incorrect may lead to termination without notice.',
+  ];
+  terms.forEach((t, i) => k.para(`${String.fromCharCode(97 + i)}) ${t}`, { size: 10, gap: 3 }));
+  k.para('We welcome you to the team and wish you a long and rewarding career with us.', { gap: 10 });
+  k.ensure(130);
+  k.para(`For ${org}`, { bold: true, gap: 30 });
+  k.para('Authorised Signatory', { size: 9.5, gap: 22 });
+  k.para('Acceptance', { bold: true, size: 10.5, gap: 2 });
+  k.para(`I have read and accept the terms of this appointment.          Signature: ____________________          Date: ____________`, { size: 9.5 });
+  footer(doc, `APT/${a.employee_code} · Private & confidential`, c.letterhead);
   return doc.output('blob');
 }
 

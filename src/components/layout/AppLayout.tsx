@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import {
-  BarChart3, Bell, Briefcase, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileSignature, FileText,
+  BarChart3, Bell, Megaphone, Briefcase, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileSignature, FileText,
   KanbanSquare, LayoutDashboard, LogOut, Mail, Menu, Network, Plane, Settings, ShieldCheck, UserCheck, UserCircle, Users,
   UsersRound, Wallet, X, History, Crown, Check, MessagesSquare, Moon, Monitor, Sun,
 } from 'lucide-react';
@@ -50,6 +50,7 @@ export const NAV: NavGroup[] = [
       { to: '/app', label: 'Dashboard', icon: <LayoutDashboard className={ic} />, end: true },
       { to: '/app/notifications', label: 'Notifications', icon: <Bell className={ic} /> },
       { to: '/app/communication', label: 'Communication', icon: <MessagesSquare className={ic} />, badge: 'chat' },
+      { to: '/app/openings', label: 'Internal Openings', icon: <Megaphone className={ic} /> },
     ],
   },
   {

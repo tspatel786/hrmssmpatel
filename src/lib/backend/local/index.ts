@@ -126,6 +126,33 @@ function createLocalAuth(pg: PGlite, onUser: (u: AuthUser | null) => void): Auth
       set(user);
       return user;
     },
+    async signInWithEmployeeId(employeeId, password) {
+      // demo equivalent of the employee-auth edge function: resolve the ID to linked logins and try the password on each
+      const emails = await runAs(pg, { role: 'service_role' }, async (tx) =>
+        (await tx.query<{ e: string[] }>('select public.login_emails_for_code($1) e', [employeeId])).rows[0]?.e ?? []);
+      for (const email of emails) {
+        try {
+          return await this.signIn(email, password);
+        } catch {
+          /* try the next account with this Employee ID */
+        }
+      }
+      throw new BackendError('Invalid Employee ID or password');
+    },
+    async activateAccount(token, password) {
+      validatePassword(password);
+      const info = await runAs(pg, { role: 'service_role' }, async (tx) =>
+        (await tx.query<{ j: { status: string; email: string; employee_name: string } }>('select public.public_employee_activation($1) j', [token])).rows[0].j);
+      if (info.status === 'expired') throw new BackendError('This link has expired. Ask HR to send a new one.');
+      if (info.status !== 'valid') throw new BackendError('This link is not valid or was already used');
+      const email = info.email.toLowerCase();
+      const existing = await pg.query<{ id: string }>('select id from auth.users where lower(email) = $1', [email]);
+      let userId = existing.rows[0]?.id;
+      if (userId) await pg.query('update auth.users set encrypted_password = $1 where id = $2', [await hashPassword(password), userId]);
+      else userId = (await createAuthUser(pg, email, password, info.employee_name)).id;
+      await runAs(pg, { role: 'service_role' }, (tx) => tx.query('select public.consume_employee_activation($1, $2)', [token, userId]));
+      return { email };
+    },
     async signUp(email, password, fullName) {
       const user = await createAuthUser(pg, email, password, fullName);
       set(user);

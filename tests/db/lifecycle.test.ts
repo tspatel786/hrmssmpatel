@@ -3,7 +3,7 @@
 // through the same LocalDb adapter the demo app uses, with RLS enforced.
 import type { PGlite } from '@electric-sql/pglite';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anonUpload, clientFor, createTestDb, createUser, serviceClient, sql, uploadAs } from './harness';
+import { anonUpload, clientFor, createTestDb, createUser, serviceClient, sql, uploadAs, verifyJoiningDocuments } from './harness';
 
 let pg: PGlite;
 let hrId: string;
@@ -257,11 +257,26 @@ describe('Hiring lifecycle: careers application → employee', () => {
     await hr().rpc('confirm_joining', { p_onboarding: onboardingId, p_joining_date: isoDate(20) });
     const tasks = await hr().list<{ id: string }>({ table: 'onboarding_tasks', filters: [{ column: 'onboarding_id', op: 'eq', value: onboardingId }] });
     for (const t of tasks.rows) await hr().update('onboarding_tasks', t.id, { is_completed: true });
+    await expect(hr().rpc('complete_onboarding', { p_onboarding: onboardingId })).rejects.toThrow(/Verify the required documents first/);
+    // HR rejects a blurry upload with a reason; the joiner is emailed and may upload again (the helper below re-submits it)
+    const [ob] = await sql<{ documents_token: string; company_id: string }>(pg, 'select documents_token, company_id from onboardings where id = $1', [onboardingId]);
+    const portal = await clientFor(pg, null).rpc<{ documents: { id: string; label: string; status: string }[] }>('public_onboarding_documents', { p_token: ob.documents_token });
+    expect(portal.documents.map((d) => d.label)).toContain('PAN card');
+    const pan = portal.documents.find((d) => d.label === 'PAN card')!;
+    const blurry = `${ob.company_id}/onboarding/${onboardingId}/${crypto.randomUUID()}/pan.jpg`;
+    await anonUpload(pg, 'documents', blurry);
+    await expect(clientFor(pg, null).rpc('public_submit_onboarding_document', { p_token: crypto.randomUUID(), p_document: pan.id, p_file: { path: blurry } })).rejects.toThrow(/not valid/);
+    await clientFor(pg, null).rpc('public_submit_onboarding_document', { p_token: ob.documents_token, p_document: pan.id, p_file: { path: blurry, name: 'pan.jpg', size: 4 } });
+    await expect(hr().rpc('verify_onboarding_document', { p_document: pan.id, p_approve: false })).rejects.toThrow(/reason/);
+    await hr().rpc('verify_onboarding_document', { p_document: pan.id, p_approve: false, p_note: 'Image is blurry' });
+    const [rej] = await sql<{ body_html: string }>(pg, "select body_html from email_logs where template_key = 'document_rejected'");
+    expect(rej.body_html).toContain('Image is blurry');
+    await verifyJoiningDocuments(pg, hrId, onboardingId);
     employeeId = await hr().rpc<string>('complete_onboarding', { p_onboarding: onboardingId, p_base_url: 'http://localhost:5173' });
     expect(employeeId).toBeTruthy();
     const emails = await sql<{ template_key: string }>(pg,
-      `select template_key from email_logs where template_key in ('joining_confirmation','welcome_employee','offer_accepted') order by 1`);
-    expect(emails.map((e) => e.template_key)).toEqual(['joining_confirmation', 'offer_accepted', 'welcome_employee']);
+      `select template_key from email_logs where template_key in ('joining_confirmation','employee_credentials','offer_accepted','documents_requested','documents_verified') order by 1`);
+    expect(emails.map((e) => e.template_key)).toEqual(['documents_requested', 'documents_verified', 'employee_credentials', 'joining_confirmation', 'offer_accepted']);
   });
 
   it('15-16. employee appears in Employee Management with offer terms; candidate marked hired', async () => {

@@ -1,5 +1,5 @@
 import { ArrowLeft, CheckCircle2, Copy, Download, Eye, Pencil, Send, Trash2, Undo2, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StatusBadge } from '@/components/DataTable';
@@ -10,7 +10,8 @@ import { appBaseUrl, config } from '@/lib/config';
 import { downloadBlob } from '@/lib/csv';
 import { fmtDate, fmtDateTime, fmtMoney, titleCase } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
-import { generateOfferPdf } from '@/lib/pdf';
+import { pdfCompany } from '@/lib/letters';
+import { generateOfferPdf, type PdfCompany } from '@/lib/pdf';
 import { OfferFormModal, type Offer } from './OfferForm';
 import { useOfferTemplates } from './OfferTemplates';
 
@@ -31,12 +32,15 @@ export function OfferDetail() {
   const [sentLink, setSentLink] = useState<string | null>(null);
 
   const o = q.data?.rows[0];
+  // company letterhead (loaded once) so previews and downloads look like the letter that is emailed
+  const [letterCo, setLetterCo] = useState<PdfCompany | null>(null);
+  useEffect(() => { if (company) void pdfCompany(company).then(setLetterCo); }, [company]);
   const pdfData = () => ({
     offer_number: o!.offer_number, candidate_name: o!.candidate_name, job_title: o!.job_title, designation: o!.designation_title, department: o!.department_name,
     reporting_manager: o!.reporting_manager_name, employment_type: o!.employment_type, work_location: o!.work_location, ctc_annual: o!.ctc_annual,
     basic_monthly: o!.basic_monthly, hra_monthly: o!.hra_monthly, allowances_monthly: o!.allowances_monthly, joining_date: o!.joining_date,
     expiry_date: o!.expiry_date, probation_months: o!.probation_months, additional_terms: o!.additional_terms, issued_at: o!.sent_at ?? new Date().toISOString(),
-    candidate_signature: o!.candidate_signature, responded_at: o!.responded_at, company: company!,
+    candidate_signature: o!.candidate_signature, responded_at: o!.responded_at, company: letterCo ?? company!,
     template: (() => { const tl = templates.data?.rows ?? []; return tl.find((t) => t.id === o!.template_id) ?? tl.find((t) => t.is_default) ?? null; })(),
   });
 
@@ -45,7 +49,7 @@ export function OfferDetail() {
     success: 'Decision recorded', onSuccess: () => setDeciding(null),
   });
   const send = useAction(async () => {
-    const pdf = generateOfferPdf(pdfData());
+    const pdf = generateOfferPdf({ ...pdfData(), company: await pdfCompany(company!) });
     const path = `${companyId}/offers/${id}.pdf`;
     await api.storage.upload('documents', path, pdf, 'application/pdf');
     return api.db.rpc<{ offer_link: string }>('send_offer', { p_offer: id, p_base_url: appBaseUrl(), p_pdf_path: path });

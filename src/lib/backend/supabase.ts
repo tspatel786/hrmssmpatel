@@ -118,6 +118,18 @@ function toUser(u: { id: string; email?: string; user_metadata?: Record<string, 
   return { id: u.id, email: u.email ?? '', fullName: (u.user_metadata?.full_name as string) ?? undefined };
 }
 
+/** Edge functions answer errors as JSON { error }; supabase-js wraps them, so read the body for a readable message. */
+async function functionError(error: unknown, fallback: string): Promise<string> {
+  const ctx = (error as { context?: Response } | null)?.context;
+  try {
+    const body = ctx && typeof ctx.json === 'function' ? await ctx.clone().json() : null;
+    if (body?.error) return String(body.error);
+  } catch {
+    /* not JSON */
+  }
+  return fallback;
+}
+
 function createAuth(sb: SupabaseClient): AuthApi {
   return {
     async getUser() {
@@ -132,6 +144,18 @@ function createAuth(sb: SupabaseClient): AuthApi {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw new BackendError(error.message === 'Invalid login credentials' ? 'Invalid email or password' : error.message);
       return toUser(data.user)!;
+    },
+    async signInWithEmployeeId(employeeId, password) {
+      const { data, error } = await sb.functions.invoke('employee-auth', { body: { action: 'login', employee_id: employeeId, password } });
+      if (error || !data?.access_token) throw new BackendError(await functionError(error, 'Invalid Employee ID or password'));
+      const { data: s, error: e2 } = await sb.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
+      if (e2 || !s.user) throw new BackendError(e2?.message ?? 'Could not sign in');
+      return toUser(s.user)!;
+    },
+    async activateAccount(token, password) {
+      const { data, error } = await sb.functions.invoke('employee-auth', { body: { action: 'activate', token, password } });
+      if (error || !data?.email) throw new BackendError(await functionError(error, 'Could not set the password'));
+      return { email: data.email as string };
     },
     async signUp(email, password, fullName) {
       const { data, error } = await sb.auth.signUp({

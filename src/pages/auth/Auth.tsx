@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, RotateCcw } from 'lucide-react';
-import { forwardRef, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Logo } from '@/components/Logo';
@@ -57,7 +57,11 @@ export function safeNext(next: string | null): string {
   return next;
 }
 
-const loginSchema = z.object({ email: z.string().trim().email('Enter a valid email'), password: z.string().min(1, 'Password is required') });
+// one field: a work email, or an Employee ID such as EMP-0001 (migration 1900)
+const loginSchema = z.object({
+  email: z.string().trim().refine((v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) || /^[A-Za-z0-9_-]{2,40}$/.test(v), 'Enter your work email or Employee ID'),
+  password: z.string().min(1, 'Password is required'),
+});
 
 export function Login() {
   const { user, setUser } = useSession();
@@ -75,7 +79,7 @@ export function Login() {
   const onSubmit = form.handleSubmit(async (v) => {
     setError('');
     try {
-      const u = await api.auth.signIn(v.email, v.password);
+      const u = v.email.includes('@') ? await api.auth.signIn(v.email, v.password) : await api.auth.signInWithEmployeeId(v.email, v.password);
       setUser(u);
       navigate(next, { replace: true });
     } catch (e) {
@@ -90,8 +94,9 @@ export function Login() {
         : <>Invited by HR? <Link to="/signup" className="font-medium text-brand-700 hover:underline">Activate your account</Link></>}>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
-        <Field label="Work email" error={form.formState.errors.email?.message} htmlFor="email">
-          <Input id="email" type="email" autoComplete="email" invalid={!!form.formState.errors.email} {...form.register('email')} />
+        <Field label="Work email or Employee ID" error={form.formState.errors.email?.message} htmlFor="email">
+          <Input id="email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="name@company.com or EMP-0001"
+            invalid={!!form.formState.errors.email} {...form.register('email')} />
         </Field>
         <Field label="Password" error={form.formState.errors.password?.message} htmlFor="password">
           <PasswordInput id="password" autoComplete="current-password" invalid={!!form.formState.errors.password} {...form.register('password')} />
@@ -249,6 +254,66 @@ export function ResetPassword() {
         {error && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
         <Field label="New password" htmlFor="pw"><PasswordInput id="pw" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field>
         <Button type="submit" className="w-full" loading={loading}>Update password</Button>
+      </form>
+    </AuthShell>
+  );
+}
+
+/** /activate/:token — one-time link from the "Employee ID and login" email (migration 1900). */
+export function ActivateAccount() {
+  const { token = '' } = useParams();
+  const { setUser } = useSession();
+  const navigate = useNavigate();
+  const [info, setInfo] = useState<{ status: string; employee_name?: string; employee_code?: string; email?: string; company_name?: string } | null>(null);
+  const [pw, setPw] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    api.db.rpc<{ status: string }>('public_employee_activation', { p_token: token })
+      .then(setInfo)
+      .catch(() => setInfo({ status: 'invalid' }));
+  }, [token]);
+
+  if (!info) return <AuthShell title="Set your password"><p className="text-sm text-slate-500">Checking your link…</p></AuthShell>;
+  if (info.status !== 'valid') {
+    const msg = info.status === 'expired' ? 'This link has expired. Ask your HR team to send a new one.'
+      : info.status === 'used' ? 'This link was already used. Sign in with your Employee ID and password.'
+      : 'This link is not valid. Check that you opened the latest email from HR.';
+    return (
+      <AuthShell title="Set your password" footer={<Link to="/login" className="font-medium text-brand-700 hover:underline">Go to sign in</Link>}>
+        <div role="alert" className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800">{msg}</div>
+      </AuthShell>
+    );
+  }
+  return (
+    <AuthShell title={`Welcome, ${info.employee_name?.split(' ')[0] ?? ''}`} subtitle={`Set a password for your ${info.company_name} HRMS account`}>
+      <div className="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm">
+        <p className="text-slate-600">Your Employee ID</p>
+        <p className="font-display text-2xl font-bold tracking-wide text-slate-900" data-testid="employee-code">{info.employee_code}</p>
+        <p className="mt-1 text-xs text-slate-500">Sign in with this ID or {info.email}</p>
+      </div>
+      <form className="space-y-4" noValidate onSubmit={async (ev) => {
+        ev.preventDefault();
+        setError('');
+        if (pw.length < 8 || !/\d/.test(pw) || !/[A-Za-z]/.test(pw)) { setError('Use at least 8 characters with letters and numbers'); return; }
+        if (pw !== confirm) { setError('Passwords do not match'); return; }
+        setLoading(true);
+        try {
+          const { email } = await api.auth.activateAccount(token, pw);
+          setUser(await api.auth.signIn(email, pw));
+          toast.success('Password set — welcome aboard!');
+          navigate('/app', { replace: true });
+        } catch (e) {
+          setError((e as Error).message);
+        } finally {
+          setLoading(false);
+        }
+      }}>
+        {error && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
+        <Field label="New password" htmlFor="new-pw" hint="At least 8 characters, with letters and numbers"><PasswordInput id="new-pw" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field>
+        <Field label="Confirm password" htmlFor="confirm-pw"><PasswordInput id="confirm-pw" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" /></Field>
+        <Button type="submit" className="w-full" loading={loading}>Set password and sign in</Button>
       </form>
     </AuthShell>
   );

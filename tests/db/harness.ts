@@ -58,3 +58,22 @@ export async function readObjectAs(pg: PGlite, userId: string | null, bucket: st
     (await tx.query(`select name from storage.objects where bucket_id = $1 and name = $2`, [bucket, name])).rows.length > 0,
   );
 }
+
+/**
+ * The joiner uploads every required joining document through the secret link (anonymous), then HR verifies each one
+ * (migration 1900: complete_onboarding refuses until required documents are verified).
+ */
+export async function verifyJoiningDocuments(pg: PGlite, hrUserId: string, onboardingId: string) {
+  const [o] = await sql<{ company_id: string; documents_token: string }>(pg,
+    'select company_id, documents_token from public.onboardings where id = $1', [onboardingId]);
+  const docs = await sql<{ id: string }>(pg,
+    'select id from public.onboarding_documents where onboarding_id = $1 and required order by sort_order', [onboardingId]);
+  const anon = clientFor(pg, null);
+  const hr = clientFor(pg, hrUserId);
+  for (const d of docs) {
+    const path = `${o.company_id}/onboarding/${onboardingId}/${crypto.randomUUID()}/doc.pdf`;
+    await anonUpload(pg, 'documents', path);
+    await anon.rpc('public_submit_onboarding_document', { p_token: o.documents_token, p_document: d.id, p_file: { path, name: 'doc.pdf', mime: 'application/pdf', size: 4 } });
+    await hr.rpc('verify_onboarding_document', { p_document: d.id, p_approve: true });
+  }
+}

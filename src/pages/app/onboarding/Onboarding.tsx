@@ -1,4 +1,5 @@
-import { ArrowLeft, CalendarCheck, CheckCircle2, Plus, Trash2, UserCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, CheckCircle2, Eye, FileCheck2, Plus, Send, ThumbsDown, ThumbsUp, Trash2, UserCheck, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { StatusBadge, DataTable, type Column } from '@/components/DataTable';
@@ -9,6 +10,7 @@ import { appBaseUrl } from '@/lib/config';
 import { opts } from '@/lib/constants';
 import { fmtDate, fmtDateTime, titleCase } from '@/lib/format';
 import { useAction, useList, useTable } from '@/lib/hooks';
+import { issueAppointmentLetter } from '@/lib/letters';
 
 interface Onb {
   id: string; company_id: string; offer_id: string; candidate_id: string; application_id: string; status: string; joining_date: string;
@@ -56,7 +58,7 @@ export function Onboarding() {
 export function OnboardingDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { companyId, can } = useCompany();
+  const { companyId, company, can } = useCompany();
   const q = useList<Onb>({ table: 'v_onboardings', filters: [{ column: 'id', op: 'eq', value: id }], count: false });
   const tasks = useList<Task>({ table: 'onboarding_tasks', filters: [{ column: 'onboarding_id', op: 'eq', value: id }], order: [{ column: 'sort_order' }, { column: 'created_at' }], range: [0, 199] });
   const [confirming, setConfirming] = useState(false);
@@ -74,9 +76,16 @@ export function OnboardingDetail() {
     { success: 'Task added', onSuccess: () => setNewTask({ title: '', category: 'hr', due_date: '' }) });
   const delTask = useAction((tid: string) => api.db.remove('onboarding_tasks', tid), { success: 'Task removed' });
   const confirm = useAction(() => api.db.rpc('confirm_joining', { p_onboarding: id, p_joining_date: joinDate }), { success: 'Joining confirmed · confirmation email queued', onSuccess: () => setConfirming(false) });
-  const complete = useAction(() => api.db.rpc<string>('complete_onboarding', { p_onboarding: id, p_base_url: appBaseUrl() }), {
-    success: 'Employee record created · welcome email queued', onSuccess: (empId) => navigate(`/app/employees/${empId}`),
-  });
+  const complete = useAction(async () => {
+    const empId = await api.db.rpc<string>('complete_onboarding', { p_onboarding: id, p_base_url: appBaseUrl() });
+    // appointment letter on the company letterhead; the employee exists even if this step fails (resend from the employee page)
+    try {
+      await issueAppointmentLetter(empId, company!);
+    } catch (e) {
+      toast.error(`Employee created, but the appointment letter failed: ${(e as Error).message}. Send it from the employee page.`);
+    }
+    return empId;
+  }, { success: 'Employee created · Employee ID, login link and appointment letter emailed', onSuccess: (empId) => navigate(`/app/employees/${empId}`) });
   const cancel = useAction((reason: string) => api.db.rpc('cancel_onboarding', { p_onboarding: id, p_reason: reason }), { success: 'Onboarding cancelled', onSuccess: () => setCancelling(false) });
 
   if (q.isLoading) return <PageLoader />;
@@ -104,6 +113,7 @@ export function OnboardingDetail() {
           <CheckCircle2 className="h-5 w-5" /> Onboarding completed {fmtDateTime(o.completed_at)} — employee <Link className="font-semibold underline" to={`/app/employees/${o.employee_id}`}>{o.employee_code}</Link> created.
         </div>
       )}
+      <JoiningDocumentsCard onboardingId={id} companyId={companyId!} manage={manage} />
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Onboarding checklist" className="lg:col-span-2" actions={<Progress done={rows.length - pending} total={rows.length} />} padded={false}>
           {rows.length === 0 ? <EmptyState title="No checklist tasks" /> : (
@@ -157,10 +167,82 @@ export function OnboardingDetail() {
         <Field label="Joining date" required className="mt-4"><Input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} /></Field>
       </Modal>
       <ConfirmDialog open={completing} onClose={() => setCompleting(false)} loading={complete.isPending} tone="success" confirmLabel="Create employee"
-        title="Complete onboarding?" message={<>An employee record will be created from the accepted offer, leave balances allocated and a welcome email sent.{pending > 0 && <span className="mt-2 block font-medium text-amber-700">{pending} checklist task(s) are still open.</span>}</>}
+        title="Complete onboarding?" message={<>An employee record will be created from the accepted offer, leave balances allocated, and the joiner emailed their Employee ID, a set-password link and the appointment letter.{pending > 0 && <span className="mt-2 block font-medium text-amber-700">{pending} checklist task(s) are still open.</span>}</>}
         onConfirm={() => complete.mutate()} />
       <ConfirmDialog open={cancelling} onClose={() => setCancelling(false)} loading={cancel.isPending} tone="danger" confirmLabel="Cancel onboarding"
         title="Candidate did not join?" message="The onboarding will be cancelled and the application marked as withdrawn." input={{ label: 'Reason', required: true }} onConfirm={(r) => cancel.mutate(r)} />
     </>
+  );
+}
+
+interface JDoc { id: string; label: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; storage_path: string | null; file_name: string | null; note: string | null; submitted_at: string | null; verified_at: string | null }
+const DOC_TONE = { pending: 'gray', submitted: 'blue', verified: 'green', rejected: 'red' } as const;
+const DOC_LABEL = { pending: 'Not uploaded', submitted: 'To verify', verified: 'Verified', rejected: 'Re-upload requested' } as const;
+
+/** Joining documents: the joiner uploads through the emailed link, HR verifies each file before onboarding can complete. */
+function JoiningDocumentsCard({ onboardingId, companyId, manage }: { onboardingId: string; companyId: string; manage: boolean }) {
+  const docs = useList<JDoc>({ table: 'onboarding_documents', filters: [{ column: 'onboarding_id', op: 'eq', value: onboardingId }], order: [{ column: 'sort_order' }, { column: 'created_at' }], range: [0, 49] });
+  const [rejecting, setRejecting] = useState<JDoc | null>(null);
+  const [label, setLabel] = useState('');
+  const verify = useAction(({ d, approve, note }: { d: JDoc; approve: boolean; note?: string }) =>
+    api.db.rpc('verify_onboarding_document', { p_document: d.id, p_approve: approve, p_note: note ?? null }),
+    { success: 'Document updated', onSuccess: () => setRejecting(null) });
+  const resend = useAction(() => api.db.rpc('resend_onboarding_documents_link', { p_onboarding: onboardingId }), { success: 'Upload link emailed to the joiner' });
+  const add = useAction(() => api.db.insert('onboarding_documents', { company_id: companyId, onboarding_id: onboardingId, label: label.trim(), required: true, sort_order: 100 + (docs.data?.rows.length ?? 0) }),
+    { success: 'Document requested', onSuccess: () => setLabel('') });
+  const remove = useAction((d: JDoc) => api.db.remove('onboarding_documents', d.id), { success: 'Document removed' });
+  const view = async (d: JDoc) => {
+    try {
+      window.open(await api.storage.signedUrl('documents', d.storage_path!), '_blank', 'noopener');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const rows = docs.data?.rows ?? [];
+  const required = rows.filter((d) => d.required);
+  const verified = required.filter((d) => d.status === 'verified').length;
+
+  return (
+    <Card className="mb-5" padded={false}
+      title={<span className="flex items-center gap-2"><FileCheck2 className="h-4 w-4 text-brand-600" /> Joining documents</span>}
+      actions={<span className="flex items-center gap-3"><Progress done={verified} total={required.length} />{manage && <Button variant="secondary" size="sm" icon={<Send className="h-4 w-4" />} loading={resend.isPending} onClick={() => resend.mutate()}>Email upload link</Button>}</span>}>
+      {rows.length === 0 ? <EmptyState title="No documents requested" /> : (
+        <ul className="divide-y divide-slate-100" data-testid="onboarding-documents">
+          {rows.map((d) => (
+            <li key={d.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-800">{d.label}{!d.required && <span className="ml-1 text-xs font-normal text-slate-500">(optional)</span>}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <Badge tone={DOC_TONE[d.status]}>{DOC_LABEL[d.status]}</Badge>
+                  {d.file_name && <span className="truncate">{d.file_name}</span>}
+                  {d.submitted_at && <span>uploaded {fmtDateTime(d.submitted_at)}</span>}
+                  {d.status === 'rejected' && d.note && <span className="text-rose-600">· {d.note}</span>}
+                </div>
+              </div>
+              <span className="flex items-center gap-1.5">
+                {d.storage_path && <Button variant="ghost" size="sm" icon={<Eye className="h-4 w-4" />} onClick={() => void view(d)}>View</Button>}
+                {manage && d.status === 'submitted' && (
+                  <>
+                    <Button variant="success" size="sm" icon={<ThumbsUp className="h-4 w-4" />} loading={verify.isPending} onClick={() => verify.mutate({ d, approve: true })}>Verify</Button>
+                    <Button variant="ghost" size="sm" className="text-rose-600" icon={<ThumbsDown className="h-4 w-4" />} onClick={() => setRejecting(d)}>Reject</Button>
+                  </>
+                )}
+                {manage && !d.storage_path && <Button variant="ghost" size="sm" aria-label={`Remove ${d.label}`} onClick={() => remove.mutate(d)}><Trash2 className="h-4 w-4 text-slate-400" /></Button>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {manage && (
+        <form className="flex gap-2 border-t border-slate-100 p-4" onSubmit={(e) => { e.preventDefault(); if (label.trim().length >= 2) add.mutate(); }}>
+          <Input placeholder="Request another document (e.g. Experience letter)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={120} aria-label="Document name" />
+          <Button type="submit" variant="secondary" icon={<Plus className="h-4 w-4" />} disabled={label.trim().length < 2} loading={add.isPending}>Request</Button>
+        </form>
+      )}
+      <ConfirmDialog open={!!rejecting} onClose={() => setRejecting(null)} tone="danger" confirmLabel="Reject & ask to re-upload" loading={verify.isPending}
+        title={`Reject ${rejecting?.label ?? ''}?`} message="The joiner gets an email with your reason and a link to upload it again."
+        input={{ label: 'Reason', required: true, placeholder: 'e.g. Photo is blurry, back side missing' }}
+        onConfirm={(note) => rejecting && verify.mutate({ d: rejecting, approve: false, note })} />
+    </Card>
   );
 }

@@ -30,6 +30,9 @@ export interface Company {
   timezone: string;
   currency: string;
   logo_url: string | null;
+  /** letterhead images for offer / appointment letters (migration 1900) */
+  letterhead_header_url?: string | null;
+  letterhead_footer_url?: string | null;
   primary_color: string;
   careers_enabled: boolean;
   careers_tagline: string | null;

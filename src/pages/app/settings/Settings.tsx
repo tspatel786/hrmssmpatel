@@ -57,6 +57,17 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
     await api.db.update('companies', companyId!, { logo_url: await api.storage.publicUrl('company-assets', path) });
     await refresh();
   }, { success: 'Logo updated' });
+  // letterhead for offer and appointment letters (migration 1900): full-width header and footer images
+  const letterhead = useAction(async ({ part, f }: { part: 'header' | 'footer'; f: File | null }) => {
+    const col = part === 'header' ? 'letterhead_header_url' : 'letterhead_footer_url';
+    if (!f) { await api.db.update('companies', companyId!, { [col]: null }); await refresh(); return; }
+    if (!['image/png', 'image/jpeg'].includes(f.type)) throw new Error('Use a PNG or JPG image');
+    if (f.size > 1048576) throw new Error('Image must be 1 MB or smaller');
+    const path = `${companyId}/letterhead-${part}-${Date.now()}.${f.type === 'image/png' ? 'png' : 'jpg'}`;
+    await api.storage.upload('company-assets', path, f, f.type);
+    await api.db.update('companies', companyId!, { [col]: await api.storage.publicUrl('company-assets', path) });
+    await refresh();
+  }, { success: 'Letterhead updated' });
   if (!company) return <PageLoader />;
   const fields: Record<typeof section, FieldDef<CompanyValues>[]> = {
     profile: [
@@ -95,6 +106,31 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
             </label>
             <p className="text-xs text-slate-500">PNG/JPG/SVG, max 1 MB. Shown on your careers page and offer pages.</p>
           </div>
+        </Card>
+      )}
+      {section === 'profile' && (
+        <Card title="Letterhead" actions={<span className="text-xs text-slate-500">Used on offer and appointment letters</span>}>
+          <div className="grid gap-5 md:grid-cols-2">
+            {(['header', 'footer'] as const).map((part) => {
+              const url = part === 'header' ? company.letterhead_header_url : company.letterhead_footer_url;
+              return (
+                <div key={part}>
+                  <p className="label">{part === 'header' ? 'Header (top of every page)' : 'Footer (bottom of every page)'}</p>
+                  <div className="flex min-h-[72px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-2">
+                    {url ? <img src={url} alt={`Letterhead ${part}`} className="max-h-24 w-full object-contain" /> : <span className="text-xs text-slate-400">No {part} image</span>}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <label className="btn-secondary btn-sm cursor-pointer"><ImageUp className="h-4 w-4" /> {url ? 'Replace' : 'Upload'}
+                      <input type="file" className="sr-only" accept="image/png,image/jpeg" aria-label={`Upload letterhead ${part}`}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) letterhead.mutate({ part, f }); e.target.value = ''; }} />
+                    </label>
+                    {url && <button type="button" className="btn-ghost btn-sm text-rose-600" onClick={() => letterhead.mutate({ part, f: null })}>Remove</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Wide PNG or JPG images (about 2000 px wide), max 1 MB each. They are drawn edge to edge on A4, so include your own margins and lines in the image.</p>
         </Card>
       )}
       <Card>

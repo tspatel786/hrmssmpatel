@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Eye, FileText, KeyRound, Mail, MapPin, Pencil, Phone, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, Download, Eye, FileSignature, FileText, KeyRound, Mail, MapPin, Pencil, Phone, Send, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { downloadBlob } from '@/lib/csv';
 import { fileSize, fmtDate, fmtMoney, fmtTime, monthName, titleCase } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
 import { useRoles } from '@/lib/lookups';
+import { issueAppointmentLetter } from '@/lib/letters';
 import { generatePayslipPdf, type PayslipPdfData } from '@/lib/pdf';
 import { EmployeeForm, type Employee } from './EmployeeForm';
 
@@ -18,7 +19,7 @@ interface Att { id: string; attendance_date: string; check_in: string | null; ch
 interface Bal { id: string; leave_type_name: string; leave_type_color: string; allocated: number; used: number; available: number; year: number }
 type Slip = PayslipPdfData & { id: string; run_status: string };
 interface EmpDoc { id: string; doc_type: string; file_name: string; storage_path: string; size_bytes: number | null; created_at: string }
-const EMP_DOC_TYPES = ['id_proof', 'address_proof', 'education', 'experience', 'contract', 'offer_letter', 'tax', 'other'].map((v) => ({ value: v, label: titleCase(v) }));
+const EMP_DOC_TYPES = ['id_proof', 'address_proof', 'education', 'experience', 'contract', 'offer_letter', 'appointment_letter', 'tax', 'other'].map((v) => ({ value: v, label: titleCase(v) }));
 
 export function EmployeeDetail() {
   const { id = '' } = useParams();
@@ -41,6 +42,9 @@ export function EmployeeDetail() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const remove = useAction(() => api.db.remove('employees', id), { success: 'Employee deleted', onSuccess: () => navigate('/app/employees') });
+  // Employee ID + one-time set-password link (migration 1900); works for staff added before the HRMS too
+  const sendLogin = useAction(() => api.db.rpc('send_employee_login', { p_employee: id }), { success: 'Employee ID and set-password link emailed' });
+  const sendAppointment = useAction(() => issueAppointmentLetter(id, company!), { success: 'Appointment letter saved to documents and emailed' });
   const invite = useAction(() => api.db.rpc<{ status: string }>('invite_member', { p_company: companyId, p_email: q.data!.rows[0].email, p_role: role, p_employee: id, p_base_url: appBaseUrl() }), {
     success: (r) => (r.status === 'invited' ? 'Invitation email queued' : 'Access granted'), onSuccess: () => setInviting(false),
   });
@@ -86,7 +90,9 @@ export function EmployeeDetail() {
           </div>
           {manage && (
             <div className="flex shrink-0 flex-wrap gap-2">
-              {!e.user_id && (can('users.manage') || can('employees.manage')) && <Button variant="secondary" icon={<KeyRound className="h-4 w-4" />} onClick={() => { setRole(roles.rows.find((r) => r.name === 'Employee')?.id as string ?? ''); setInviting(true); }}>Give HRMS access</Button>}
+              {!e.user_id && <Button icon={<Send className="h-4 w-4" />} loading={sendLogin.isPending} onClick={() => sendLogin.mutate()} title="Emails the Employee ID and a one-time link to set a password">Send login email</Button>}
+              {!e.user_id && can('users.manage') && <Button variant="secondary" icon={<KeyRound className="h-4 w-4" />} onClick={() => { setRole(roles.rows.find((r) => r.name === 'Employee')?.id as string ?? ''); setInviting(true); }}>Give access with role</Button>}
+              <Button variant="secondary" icon={<FileSignature className="h-4 w-4" />} loading={sendAppointment.isPending} onClick={() => sendAppointment.mutate()}>Appointment letter</Button>
               <Button variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>Edit</Button>
               <Button variant="ghost" aria-label="Delete employee" onClick={() => setDeleting(true)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
             </div>
