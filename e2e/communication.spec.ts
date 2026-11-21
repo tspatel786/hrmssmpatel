@@ -15,6 +15,18 @@ const SERVICE = fs.readFileSync(path.join(root, 'supabase/.temp/service-role-key
 const run = Date.now().toString(36);
 const PW = `Chat-${run}-Pw1`;
 const admin = createClient(URL_, SERVICE, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } });
+
+// Internal deployments close public company creation (migration 1700). Test users are made platform admins only for the
+// create_company call, then demoted again so isolation checks still run as ordinary users.
+async function asPlatformAdmin<T>(userId: string, fn: () => PromiseLike<T>): Promise<T> {
+  const { error } = await admin.from('platform_admins').insert({ user_id: userId });
+  if (error) throw error;
+  try {
+    return await fn();
+  } finally {
+    await admin.from('platform_admins').delete().eq('user_id', userId);
+  }
+}
 const created: { users: string[]; companies: string[] } = { users: [], companies: [] };
 
 async function mkUser(email: string, name: string) {
@@ -44,11 +56,11 @@ test.beforeAll(async () => {
   A = await mkUser(`anna.${run}@example.com`, 'Anna Admin');
   B = await mkUser(`ben.${run}@example.com`, 'Ben Builder');
   C = await mkUser(`cy.${run}@example.com`, 'Cy Outsider');
-  const { data: co, error } = await A.sb.rpc('create_company', { p_name: 'Chat E2E Co', p_slug: `chat-e2e-${run}` });
+  const { data: co, error } = await asPlatformAdmin(A.id, () => A.sb.rpc('create_company', { p_name: 'Chat E2E Co', p_slug: `chat-e2e-${run}` }));
   if (error) throw error;
   company = co as string;
   created.companies.push(company);
-  const { data: other } = await C.sb.rpc('create_company', { p_name: 'Other Co', p_slug: `other-e2e-${run}` });
+  const { data: other } = await asPlatformAdmin(C.id, () => C.sb.rpc('create_company', { p_name: 'Other Co', p_slug: `other-e2e-${run}` }));
   created.companies.push(other as string);
   const { data: role } = await A.sb.from('roles').select('id').eq('company_id', company).eq('name', 'Employee').single();
   await A.sb.rpc('invite_member', { p_company: company, p_email: B.email, p_role: role!.id });
@@ -64,7 +76,8 @@ test.afterAll(async () => {
         await admin.storage.from('chat-attachments').remove((files ?? []).map((x) => `${c}/${f.name}/${s.name}/${x.name}`));
       }
     }
-    await admin.from('companies').delete().eq('id', c);
+    const { error: delErr } = await admin.from('companies').delete().eq('id', c);
+    if (delErr) console.warn(`[cleanup] company ${c} not deleted: ${delErr.message}`);
   }
   for (const u of created.users) await admin.auth.admin.deleteUser(u);
 });

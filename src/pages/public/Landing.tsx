@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { useSession } from '@/contexts/session';
 import { Logo } from '@/components/Logo';
 import { config, DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/config';
+import { useSignupEnabled } from '@/lib/signup';
 
 const FEATURES = [
   { icon: Briefcase, title: 'Careers site & job openings', text: 'Branded careers page per company, requisition approvals and one-click publishing.' },
@@ -18,7 +19,10 @@ const FEATURES = [
 
 export function Landing() {
   const { user } = useSession();
+  const signup = useSignupEnabled();
   if (user) return <Navigate to="/app" replace />;
+  // internal HRMS (public sign-up off): no marketing page, straight to sign-in
+  if (!signup.loading && !signup.enabled) return <Navigate to="/login" replace />;
   return (
     <div className="min-h-screen bg-ink text-ink-muted">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-ink/85 backdrop-blur">

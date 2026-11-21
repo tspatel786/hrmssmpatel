@@ -14,6 +14,18 @@ const SERVICE = fs.readFileSync(path.join(root, 'supabase/.temp/service-role-key
 const run = `cmp${Date.now().toString(36)}`;
 const PW = `Cmp-${run}-Pw1`;
 const admin = createClient(env.VITE_SUPABASE_URL, SERVICE, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } });
+
+// Internal deployments close public company creation (migration 1700). Test users are made platform admins only for the
+// create_company call, then demoted again so isolation checks still run as ordinary users.
+async function asPlatformAdmin<T>(userId: string, fn: () => PromiseLike<T>): Promise<T> {
+  const { error } = await admin.from('platform_admins').insert({ user_id: userId });
+  if (error) throw error;
+  try {
+    return await fn();
+  } finally {
+    await admin.from('platform_admins').delete().eq('user_id', userId);
+  }
+}
 let userId = '';
 let company = '';
 let candidateId = '';
@@ -25,7 +37,7 @@ test.beforeAll(async () => {
   userId = data.user.id;
   const sb = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } });
   await sb.auth.signInWithPassword({ email, password: PW });
-  const { data: co, error: ce } = await sb.rpc('create_company', { p_name: 'Compat Co', p_slug: `compat-${run}` });
+  const { data: co, error: ce } = await asPlatformAdmin(userId, () => sb.rpc('create_company', { p_name: 'Compat Co', p_slug: `compat-${run}` }));
   if (ce) throw ce;
   company = co as string;
   const { data: job } = await sb.from('jobs').insert({ company_id: company, title: 'Compat Analyst', description: 'Checks backwards compatibility.', status: 'published' }).select('id').single();
@@ -37,7 +49,10 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (company) await admin.from('companies').delete().eq('id', company);
+  if (company) {
+    const { error: delErr } = await admin.from('companies').delete().eq('id', company);
+    if (delErr) console.warn(`[cleanup] company ${company} not deleted: ${delErr.message}`);
+  }
   if (userId) await admin.auth.admin.deleteUser(userId);
 });
 

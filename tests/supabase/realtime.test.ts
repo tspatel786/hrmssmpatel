@@ -25,6 +25,18 @@ const live = process.env.SUPABASE_LIVE === '1' && !!URL_ && !!ANON && !!SERVICE;
 const run = `rt${Date.now().toString(36)}`;
 const PW = `Rt-${run}-Pw1`;
 const admin = live ? createClient(URL_, SERVICE, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } }) : (null as unknown as SupabaseClient);
+
+// Internal deployments close public company creation (migration 1700). Test users are made platform admins only for the
+// create_company call, then demoted again so isolation checks still run as ordinary users.
+async function asPlatformAdmin<T>(userId: string, fn: () => PromiseLike<T>): Promise<T> {
+  const { error } = await admin.from('platform_admins').insert({ user_id: userId });
+  if (error) throw error;
+  try {
+    return await fn();
+  } finally {
+    await admin.from('platform_admins').delete().eq('user_id', userId);
+  }
+}
 const users: string[] = [];
 const companies: string[] = [];
 const channels: [SupabaseClient, RealtimeChannel][] = [];
@@ -73,11 +85,11 @@ describe.skipIf(!live)('Supabase live: chat realtime delivery & tenant isolation
     A = await mkUser(`rta.${run}@example.com`, 'RT Anna');
     B = await mkUser(`rtb.${run}@example.com`, 'RT Ben');
     R = await mkUser(`rtr.${run}@example.com`, 'RT Rival');
-    const { data: co, error } = await A.sb.rpc('create_company', { p_name: 'RT Co', p_slug: `rt-co-${run}` });
+    const { data: co, error } = await asPlatformAdmin(A.id, () => A.sb.rpc('create_company', { p_name: 'RT Co', p_slug: `rt-co-${run}` }));
     if (error) throw error;
     company = co as string;
     companies.push(company);
-    const { data: other, error: e2 } = await R.sb.rpc('create_company', { p_name: 'RT Rival Co', p_slug: `rt-rival-${run}` });
+    const { data: other, error: e2 } = await asPlatformAdmin(R.id, () => R.sb.rpc('create_company', { p_name: 'RT Rival Co', p_slug: `rt-rival-${run}` }));
     if (e2) throw e2;
     companies.push(other as string);
     const { data: role } = await A.sb.from('roles').select('id').eq('company_id', company).eq('name', 'Employee').single();
@@ -95,7 +107,10 @@ describe.skipIf(!live)('Supabase live: chat realtime delivery & tenant isolation
     if (!live) return;
     for (const [sb, ch] of channels) await sb.removeChannel(ch);
     if (attPath) await admin.storage.from('chat-attachments').remove([attPath]);
-    for (const c of companies) await admin.from('companies').delete().eq('id', c);
+    for (const c of companies) {
+      const { error: delErr } = await admin.from('companies').delete().eq('id', c);
+      if (delErr) console.warn(`[cleanup] company ${c} not deleted: ${delErr.message}`);
+    }
     for (const u of users) await admin.auth.admin.deleteUser(u);
   }, 120_000);
 

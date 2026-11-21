@@ -24,6 +24,18 @@ const live = process.env.SUPABASE_LIVE === '1' && !!URL_ && !!ANON && !!SERVICE;
 const run = `r15${Date.now().toString(36)}`;
 const PASSWORD = `Live-${run}-Pw1`;
 const admin = live ? createClient(URL_, SERVICE, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } }) : (null as unknown as SupabaseClient);
+
+// Internal deployments close public company creation (migration 1700). Test users are made platform admins only for the
+// create_company call, then demoted again so isolation checks still run as ordinary users.
+async function asPlatformAdmin<T>(userId: string, fn: () => PromiseLike<T>): Promise<T> {
+  const { error } = await admin.from('platform_admins').insert({ user_id: userId });
+  if (error) throw error;
+  try {
+    return await fn();
+  } finally {
+    await admin.from('platform_admins').delete().eq('user_id', userId);
+  }
+}
 const userIds: string[] = [];
 let company = '';
 
@@ -48,12 +60,15 @@ describe.skipIf(!live)('Supabase live: migration 1500', () => {
     rec = await userClient(`rec.${run}@example.com`, 'Live Recruiter');
     mgr = await userClient(`mgr.${run}@example.com`, 'Live Manager');
     emp = await userClient(`emp.${run}@example.com`, 'Live Employee');
-    company = await owner.db.rpc<string>('create_company', { p_name: `Live 1500 ${run}`, p_slug: `live-1500-${run}` });
+    company = await asPlatformAdmin(owner.id, () => owner.db.rpc<string>('create_company', { p_name: `Live 1500 ${run}`, p_slug: `live-1500-${run}` }));
   }, 120_000);
 
   afterAll(async () => {
     if (!live) return;
-    if (company) await admin.from('companies').delete().eq('id', company);
+    if (company) {
+      const { error: delErr } = await admin.from('companies').delete().eq('id', company);
+      if (delErr) console.warn(`[cleanup] company ${company} not deleted: ${delErr.message}`);
+    }
     for (const u of userIds) await admin.auth.admin.deleteUser(u);
   }, 120_000);
 

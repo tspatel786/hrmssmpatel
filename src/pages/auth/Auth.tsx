@@ -10,6 +10,7 @@ import { Button, Field, Input } from '@/components/ui';
 import { useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { config, DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/config';
+import { useSignupEnabled } from '@/lib/signup';
 
 function AuthShell({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -68,6 +69,7 @@ export function Login() {
     defaultValues: { email: params.get('email') ?? '', password: params.get('email') && config.mode === 'demo' ? DEMO_PASSWORD : '' },
   });
   const [error, setError] = useState('');
+  const signup = useSignupEnabled();
   if (user) return <Navigate to={next} replace />;
 
   const onSubmit = form.handleSubmit(async (v) => {
@@ -83,7 +85,9 @@ export function Login() {
 
   return (
     <AuthShell title="Welcome back" subtitle="Sign in to your HRMS workspace"
-      footer={<>New here? <Link to="/signup" className="font-medium text-brand-700 hover:underline">Create an account</Link></>}>
+      footer={signup.enabled
+        ? <>New here? <Link to="/signup" className="font-medium text-brand-700 hover:underline">Create an account</Link></>
+        : <>Invited by HR? <Link to="/signup" className="font-medium text-brand-700 hover:underline">Activate your account</Link></>}>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
         <Field label="Work email" error={form.formState.errors.email?.message} htmlFor="email">
@@ -144,6 +148,7 @@ export function Signup() {
   const [error, setError] = useState('');
   const [confirmSent, setConfirmSent] = useState(false);
   const form = useForm<z.infer<typeof signupSchema>>({ resolver: zodResolver(signupSchema), defaultValues: { email: params.get('email') ?? '' } });
+  const signup = useSignupEnabled();
   if (user) return <Navigate to="/app" replace />;
 
   const onSubmit = form.handleSubmit(async (v) => {
@@ -171,7 +176,8 @@ export function Signup() {
   }
   const e = form.formState.errors;
   return (
-    <AuthShell title="Create your account" subtitle="Start a company workspace or accept an invitation"
+    <AuthShell title={signup.enabled ? 'Create your account' : 'Activate your account'}
+      subtitle={signup.enabled ? 'Start a company workspace or accept an invitation' : 'Use the email address your HR team invited'}
       footer={<>Already have an account? <Link to="/login" className="font-medium text-brand-700 hover:underline">Sign in</Link></>}>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}

@@ -25,6 +25,18 @@ const live = process.env.SUPABASE_LIVE === '1' && !!URL_ && !!ANON && !!SERVICE;
 const run = Date.now().toString(36);
 const PASSWORD = `Live-${run}-Pw1`;
 const admin = live ? createClient(URL_, SERVICE, { auth: { persistSession: false }, realtime: { transport: WebSocket as never } }) : (null as unknown as SupabaseClient);
+
+// Internal deployments close public company creation (migration 1700). Test users are made platform admins only for the
+// create_company call, then demoted again so isolation checks still run as ordinary users.
+async function asPlatformAdmin<T>(userId: string, fn: () => PromiseLike<T>): Promise<T> {
+  const { error } = await admin.from('platform_admins').insert({ user_id: userId });
+  if (error) throw error;
+  try {
+    return await fn();
+  } finally {
+    await admin.from('platform_admins').delete().eq('user_id', userId);
+  }
+}
 const userIds: string[] = [];
 const companies: string[] = [];
 
@@ -70,14 +82,15 @@ describe.skipIf(!live)('Supabase live: lifecycle, isolation, storage', () => {
           }
         }
       }
-      await admin.from('companies').delete().eq('id', c);
+      const { error: delErr } = await admin.from('companies').delete().eq('id', c);
+      if (delErr) console.warn(`[cleanup] company ${c} not deleted: ${delErr.message}`);
     }
     for (const u of userIds) await admin.auth.admin.deleteUser(u);
   }, 180_000);
 
   it('creates tenants and a published job', async () => {
-    company = await hr.db.rpc<string>('create_company', { p_name: 'Live Corp', p_slug: slug });
-    rivalCompany = await rival.db.rpc<string>('create_company', { p_name: 'Rival Corp', p_slug: `rival-${run}` });
+    company = await asPlatformAdmin(hr.id, () => hr.db.rpc<string>('create_company', { p_name: 'Live Corp', p_slug: slug }));
+    rivalCompany = await asPlatformAdmin(rival.id, () => rival.db.rpc<string>('create_company', { p_name: 'Rival Corp', p_slug: `rival-${run}` }));
     companies.push(company, rivalCompany);
     const roles = await hr.db.list<{ id: string }>({ table: 'roles', filters: [{ column: 'company_id', op: 'eq', value: company }, { column: 'name', op: 'eq', value: 'Interviewer' }] });
     expect((await hr.db.rpc<{ status: string }>('invite_member', { p_company: company, p_email: `panel.${run}@example.com`, p_role: roles.rows[0].id })).status).toBe('added');

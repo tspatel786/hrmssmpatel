@@ -10,6 +10,7 @@ import { Button, Field, Input, PageLoader, Select } from '@/components/ui';
 import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { slugify } from '@/lib/format';
+import { useSignupEnabled } from '@/lib/signup';
 
 const schema = z.object({
   name: z.string().trim().min(2, 'Company name is required').max(120),
@@ -20,7 +21,8 @@ const schema = z.object({
 
 export function CreateCompany() {
   const { user, loading, signOut } = useSession();
-  const { companies, switchCompany, refresh } = useCompany();
+  const { companies, switchCompany, refresh, isSuperAdmin } = useCompany();
+  const signup = useSignupEnabled();
   const navigate = useNavigate();
   const form = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema), defaultValues: { name: '', slug: '', email: user?.email ?? '', country: 'India' } });
   const name = form.watch('name');
@@ -50,6 +52,16 @@ export function CreateCompany() {
           <Logo size={36} nameClassName="text-base" />
           <button type="button" className="btn-ghost text-sm" onClick={async () => { await signOut(); navigate('/login'); }}><LogOut className="h-4 w-4" /> Sign out</button>
         </div>
+        {!signup.loading && !signup.enabled && !isSuperAdmin ? (
+          <div className="card p-8" data-testid="invite-only">
+            <h1 className="text-xl font-semibold">Waiting for an invitation</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Your account <strong>{user.email}</strong> is not linked to the company yet. Ask your HR administrator to invite this email
+              address from <em>Settings → Users</em>, then sign in again.
+            </p>
+            <Button type="button" variant="secondary" className="mt-6" onClick={() => void refresh()}>I've been invited — check again</Button>
+          </div>
+        ) : (
         <div className="card p-8">
           <h1 className="text-xl font-semibold">Set up your company</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -69,6 +81,7 @@ export function CreateCompany() {
             <Button type="submit" className="w-full" loading={form.formState.isSubmitting}>Create company</Button>
           </form>
         </div>
+        )}
         {companies.length > 0 && <p className="mt-4 text-center text-sm"><Link to="/app" className="text-brand-700 hover:underline">← Back to dashboard</Link></p>}
       </div>
     </div>
