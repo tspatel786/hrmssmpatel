@@ -183,6 +183,6 @@ Hand-offs between workflows were tested with `tests/db/workflow_gaps.test.ts` (7
 | G6 | Hiring an employee via internal application failed ("employee already exists") | Internal moves impossible | Updates the existing record — same Employee ID and login |
 | G7 | No probation confirmation step | Probation never ends | Reminders 7 days before / on the end date; HR **Probation review** (confirm or extend) on the employee page |
 
-Status: all 7 gap tests pass, plus the affected suites (attendance/leave acceptance, exit & documents). The full-suite run was stopped
+Status: **applied live 22 Nov and merged to `main`**. Full suite 185 passed (run with 2 workers to fit memory); live tests re-run after the migration. An earlier full-suite run was stopped
 by Claude Code for low memory, so migration 2100 is **committed to `product` but not yet applied live or merged to `main`**
 (a rollback snapshot and dry run are ready). No live employee was affected: the live company has no employees yet.
