@@ -6,7 +6,7 @@ import { api } from '@/lib/backend';
 import { EMPLOYMENT_TYPES } from '@/lib/constants';
 import { fmtMoney } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
-import { useDepartments, useDesignations, useEmployeeOptions } from '@/lib/lookups';
+import { designationsFor, useDepartments, useDesignations, useEmployeeOptions } from '@/lib/lookups';
 import { optId, optStr, reqDate, reqNum } from '@/lib/schemas';
 import { useOfferTemplates } from './OfferTemplates';
 
@@ -82,7 +82,7 @@ export function OfferFormModal({ open, onClose, application, offer, onSaved }: {
   const cur = company?.currency ?? 'INR';
   const fields: FieldDef<Values>[] = [
     { name: 'template_id', label: 'Letter template', type: 'select', hidden: !templates.isSuccess || !templates.data?.rows.length, options: (templates.data?.rows ?? []).map((t) => ({ value: t.id, label: `${t.name}${t.is_default ? ' (default)' : ''}` })), span: 2, hint: 'Controls the letter title and wording; manage templates on the Offers page' },
-    { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options },
+    { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options, filterOptions: (v) => designationsFor(designations.rows, v.department_id), hint: 'Shows designations of the selected department' },
     { name: 'department_id', label: 'Department', type: 'select', options: departments.options },
     { name: 'employment_type', label: 'Employment type', type: 'select', options: EMPLOYMENT_TYPES, required: true },
     { name: 'reporting_manager_id', label: 'Reporting manager', type: 'select', options: employees.options },

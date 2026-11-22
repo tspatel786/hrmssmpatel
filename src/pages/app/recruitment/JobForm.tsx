@@ -4,7 +4,7 @@ import { useCompany } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { EMPLOYMENT_TYPES, opts, WORK_MODES } from '@/lib/constants';
 import { useAction } from '@/lib/hooks';
-import { useDepartments, useDesignations, useMembers } from '@/lib/lookups';
+import { designationsFor, useDepartments, useDesignations, useMembers } from '@/lib/lookups';
 import { optDate, optId, optNum, optStr, reqNum, reqStr, tags } from '@/lib/schemas';
 
 export interface Job {
@@ -59,7 +59,7 @@ export function JobForm({ open, onClose, job, prefill, onSaved }: {
   const fields: FieldDef<JobValues>[] = [
     { name: 'title', label: 'Job title', required: true, span: 2 },
     { name: 'department_id', label: 'Department', type: 'select', options: departments.options },
-    { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options },
+    { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options, filterOptions: (v) => designationsFor(designations.rows, v.department_id), hint: 'Shows designations of the selected department' },
     { name: 'location', label: 'Location', required: true },
     { name: 'work_mode', label: 'Work mode', type: 'select', options: WORK_MODES, required: true },
     { name: 'employment_type', label: 'Employment type', type: 'select', options: EMPLOYMENT_TYPES, required: true },

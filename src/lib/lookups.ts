@@ -17,6 +17,12 @@ function useOptions<T extends Record<string, unknown>>(table: string, label: (r:
 }
 
 type R = Record<string, unknown>;
+
+/** Designations for a department: those linked to it plus general ones (no department). All when none is chosen. */
+export function designationsFor(rows: R[], departmentId: unknown): Option[] {
+  const dept = departmentId ? String(departmentId) : '';
+  return rows.filter((r) => !dept || !r.department_id || String(r.department_id) === dept).map((r) => ({ value: String(r.id), label: String(r.title) }));
+}
 const byName = (r: R) => String(r.name);
 const byTitle = (r: R) => String(r.title);
 const byFullName = (r: R) => `${r.full_name}${r.employee_code ? ` (${r.employee_code})` : ''}`;

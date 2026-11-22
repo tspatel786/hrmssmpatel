@@ -3,14 +3,15 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { clean, FormFields, type FieldDef } from '@/components/FormModal';
+import { clean, DraftNotice, FormFields, type FieldDef } from '@/components/FormModal';
+import { useFormDraft } from '@/lib/formDraft';
 import { Button, Modal } from '@/components/ui';
 import { useCompany } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { appBaseUrl } from '@/lib/config';
 import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, GENDERS, opts } from '@/lib/constants';
 import { useAction } from '@/lib/hooks';
-import { useDepartments, useDesignations, useEmployeeOptions } from '@/lib/lookups';
+import { designationsFor, useDepartments, useDesignations, useEmployeeOptions } from '@/lib/lookups';
 import { optDate, optEmail, optId, optNum, optStr, reqDate, reqStr } from '@/lib/schemas';
 
 export interface Employee {
@@ -48,12 +49,11 @@ export function EmployeeForm({ open, onClose, employee, onSaved }: { open: boole
   const managers = useEmployeeOptions();
   const [error, setError] = useState('');
   const form = useForm<Values>({ resolver: zodResolver(schema) });
+  const defaults = (employee ?? { employment_type: 'full_time', status: 'active', joining_date: new Date().toISOString().slice(0, 10), country: company?.country ?? '' }) as Values;
+  // unsaved entries survive closing the dialog (bank account and PAN are never stored in the browser)
+  const draft = useFormDraft(form, `employee:${employee?.id ?? 'new'}`, open, defaults);
   useEffect(() => {
-    if (open) {
-      setError('');
-      form.reset((employee ?? { employment_type: 'full_time', status: 'active', joining_date: new Date().toISOString().slice(0, 10), country: company?.country ?? '' }) as never);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (open) setError('');
   }, [open, employee]);
   const save = useAction(async (v: Values) => {
     const { personal_email: _p, ...rest } = v;
@@ -94,7 +94,7 @@ export function EmployeeForm({ open, onClose, employee, onSaved }: { open: boole
       { name: 'employee_code', label: 'Employee code', placeholder: `Auto (${company?.employee_code_prefix}-0001)`, hint: employee ? undefined : 'Leave blank to auto-generate' },
       { name: 'status', label: 'Status', type: 'select', options: EMPLOYEE_STATUSES, required: true },
       { name: 'department_id', label: 'Department', type: 'select', options: departments.options },
-      { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options },
+      { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options, filterOptions: (v) => designationsFor(designations.rows, v.department_id), hint: 'Shows designations of the selected department' },
       { name: 'manager_id', label: 'Reporting manager', type: 'select', options: managers.options.filter((m) => m.value !== employee?.id) },
       { name: 'employment_type', label: 'Employment type', type: 'select', options: EMPLOYMENT_TYPES, required: true },
       { name: 'work_location', label: 'Work location' }, { name: 'joining_date', label: 'Joining date', type: 'date', required: true },
@@ -115,6 +115,7 @@ export function EmployeeForm({ open, onClose, employee, onSaved }: { open: boole
     setError('');
     try {
       await save.mutateAsync(v);
+      draft.clearDraft();
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -124,6 +125,7 @@ export function EmployeeForm({ open, onClose, employee, onSaved }: { open: boole
     <Modal open={open} onClose={onClose} size="xl" title={employee ? `Edit ${employee.full_name}` : 'Add employee'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" form="emp-form" loading={form.formState.isSubmitting}>{employee ? 'Save changes' : 'Create employee'}</Button></>}>
       <form id="emp-form" onSubmit={submit} noValidate className="space-y-6">
+        <DraftNotice restoredAt={draft.restoredAt} onDiscard={draft.discardDraft} />
         {error && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
         {Object.keys(form.formState.errors).length > 0 && <p className="text-sm text-rose-600">Please fix the highlighted fields.</p>}
         {sections.map((s) => (

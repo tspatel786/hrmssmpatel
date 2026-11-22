@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '@/lib/backend';
+import { clearAllDrafts } from '@/lib/formDraft';
 import type { AuthUser } from '@/lib/backend/types';
 
 export interface CompanySummary {
@@ -93,6 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [qc]);
 
   const signOut = useCallback(async () => {
+    clearAllDrafts();
     await api.auth.signOut();
     setUser(null);
     qc.clear();

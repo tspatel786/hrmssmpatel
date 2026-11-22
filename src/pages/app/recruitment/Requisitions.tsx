@@ -10,7 +10,7 @@ import { api } from '@/lib/backend';
 import { EMPLOYMENT_TYPES, opts, PRIORITIES } from '@/lib/constants';
 import { fmtDate, fmtMoney, titleCase } from '@/lib/format';
 import { useAction, useTable } from '@/lib/hooks';
-import { useDepartments, useDesignations } from '@/lib/lookups';
+import { designationsFor, useDepartments, useDesignations } from '@/lib/lookups';
 import { optDate, optId, optNum, optStr, reqNum, reqStr } from '@/lib/schemas';
 
 export interface Requisition {
@@ -60,7 +60,7 @@ export function Requisitions() {
   const fields: FieldDef<Values>[] = [
     { name: 'title', label: 'Position title', required: true, span: 2 },
     { name: 'department_id', label: 'Department', type: 'select', options: departments.options },
-    { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options },
+    { name: 'designation_id', label: 'Designation', type: 'select', options: designations.options, filterOptions: (v) => designationsFor(designations.rows, v.department_id), hint: 'Shows designations of the selected department' },
     { name: 'headcount', label: 'Headcount', type: 'number', required: true, min: 1 },
     { name: 'employment_type', label: 'Employment type', type: 'select', options: EMPLOYMENT_TYPES, required: true },
     { name: 'location', label: 'Location' },

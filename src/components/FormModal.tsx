@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import clsx from 'clsx';
 import { useEffect, useState } from 'react';
-import { Controller, useForm, type DefaultValues, type FieldValues, type Path } from 'react-hook-form';
+import { Controller, useForm, useWatch, type DefaultValues, type FieldValues, type Path, type UseFormReturn } from 'react-hook-form';
 import type { ZodType } from 'zod';
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea, type Option } from './ui';
+import { fmtDateTime } from '@/lib/format';
+import { useFormDraft } from '@/lib/formDraft';
 
 export interface FieldDef<T> {
   name: Path<T>;
@@ -20,6 +22,33 @@ export interface FieldDef<T> {
   max?: number | string;
   hidden?: boolean;
   disabled?: boolean;
+  /** Dependent dropdown: options computed from the other values (e.g. designations of the selected department). */
+  filterOptions?: (values: Record<string, unknown>) => Option[];
+}
+
+/** A dropdown whose options depend on other fields; a choice that no longer fits is cleared. */
+function DependentSelect<T extends FieldValues>({ field, form, common }: {
+  field: FieldDef<T>; form: UseFormReturn<T>; common: { id: string; invalid: boolean; disabled?: boolean; placeholder?: string };
+}) {
+  const values = useWatch({ control: form.control }) as Record<string, unknown>;
+  const options = field.filterOptions!(values);
+  const current = values[field.name as string];
+  const known = options.length > 0 || (field.options?.length ?? 0) > 0;
+  useEffect(() => {
+    if (known && current && !options.some((o) => o.value === String(current))) form.setValue(field.name, '' as never, { shouldDirty: true });
+  }, [known, current, options, form, field.name]);
+  return <Select {...common} options={options} placeholder={field.required ? 'Select…' : '— None —'} {...form.register(field.name)} />;
+}
+
+/** "Draft restored" note with a way to start over. */
+export function DraftNotice({ restoredAt, onDiscard }: { restoredAt: string | null; onDiscard: () => void }) {
+  if (!restoredAt) return null;
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-800" role="status">
+      <span>Unsaved entries from {fmtDateTime(restoredAt)} were restored.</span>
+      <button type="button" className="font-medium underline hover:no-underline" onClick={onDiscard}>Discard draft</button>
+    </div>
+  );
 }
 
 /** Converts '' to null and trims strings so optional DB columns are stored as NULL. */
@@ -43,7 +72,9 @@ export function FormFields<T extends FieldValues>({ fields, form }: { fields: Fi
             control = <Textarea {...common} rows={f.rows ?? 4} {...form.register(f.name)} />;
             break;
           case 'select':
-            control = <Select {...common} options={f.options ?? []} placeholder={f.required ? 'Select…' : '— None —'} {...form.register(f.name)} />;
+            control = f.filterOptions
+              ? <DependentSelect field={f} form={form} common={common} />
+              : <Select {...common} options={f.options ?? []} placeholder={f.required ? 'Select…' : '— None —'} {...form.register(f.name)} />;
             break;
           case 'checkbox':
             control = (
@@ -77,7 +108,7 @@ export function FormFields<T extends FieldValues>({ fields, form }: { fields: Fi
 }
 
 export function FormModal<T extends FieldValues>({
-  open, onClose, title, description, schema, fields, defaultValues, onSubmit, submitLabel = 'Save', size = 'lg', children,
+  open, onClose, title, description, schema, fields, defaultValues, onSubmit, submitLabel = 'Save', size = 'lg', children, draftKey,
 }: {
   open: boolean;
   onClose: () => void;
@@ -90,20 +121,22 @@ export function FormModal<T extends FieldValues>({
   submitLabel?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   children?: React.ReactNode;
+  /** Unsaved entries are kept under this key (default: the title + record id); null turns drafts off. */
+  draftKey?: string | null;
 }) {
   const form = useForm<T>({ resolver: zodResolver(schema), defaultValues });
   const [error, setError] = useState('');
+  const recordId = (defaultValues as Record<string, unknown> | undefined)?.id;
+  const key = draftKey === undefined ? `${title}:${recordId ?? 'new'}` : draftKey;
+  const draft = useFormDraft(form, key, open, defaultValues as T);
   useEffect(() => {
-    if (open) {
-      form.reset(defaultValues);
-      setError('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (open) setError('');
   }, [open]);
   const submit = form.handleSubmit(async (v) => {
     setError('');
     try {
       await onSubmit(v);
+      draft.clearDraft();
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -118,6 +151,7 @@ export function FormModal<T extends FieldValues>({
         </>
       }>
       <form id="form-modal" onSubmit={submit} noValidate>
+        <DraftNotice restoredAt={draft.restoredAt} onDiscard={draft.discardDraft} />
         {error && <div role="alert" className="mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{error}</div>}
         <FormFields fields={fields} form={form} />
         {children}
