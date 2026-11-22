@@ -143,4 +143,26 @@ describe('workflow hand-off gaps', () => {
     expect(row.status).toBe('active');
     await expect(as('hr').rpc('decide_probation', { p_employee: e.id, p_confirm: true })).rejects.toThrow(/not on probation/);
   });
+
+  it('G8 leave balances appear automatically: new employees pro-rated, next year allocated with carry-forward', async () => {
+    const year = Number(today.slice(0, 4));
+    const e = await as('hr').insert<{ id: string }>('employees', {
+      company_id: ids.company, first_name: 'New', last_name: 'Joiner', email: 'newjoiner@gap.test', joining_date: `${year}-07-01`,
+    });
+    const bal = await sql<{ code: string; allocated: number }>(pg,
+      'select t.code, b.allocated::float allocated from leave_balances b join leave_types t on t.id = b.leave_type_id where b.employee_id = $1 and b.year = $2 order by t.code', [e.id, year]);
+    expect(bal.find((b) => b.code === 'CL')?.allocated).toBe(6); // 12 days x 6/12 months
+    expect(bal.find((b) => b.code === 'LOP')).toBeUndefined(); // unpaid types get no balance
+    // next year: the daily job allocates with carry-forward (EL carries forward by default)
+    const [el] = await sql<{ id: string; carry_forward: boolean }>(pg, "select id, carry_forward from leave_types where company_id = $1 and code = 'EL'", [ids.company]);
+    await sql(pg, 'update leave_balances set used = 2 where employee_id = $1 and leave_type_id = $2 and year = $3', [e.id, el.id, year]);
+    await svc().rpc('allocate_year_balances', { p_company: ids.company, p_year: year + 1 }).catch(async () => {
+      await sql(pg, 'select public.allocate_year_balances($1, $2)', [ids.company, year + 1]);
+    });
+    const [next] = await sql<{ allocated: number }>(pg, 'select allocated::float allocated from leave_balances where employee_id = $1 and leave_type_id = $2 and year = $3', [e.id, el.id, year + 1]);
+    const [prev] = await sql<{ allocated: number }>(pg, 'select allocated::float allocated from leave_balances where employee_id = $1 and leave_type_id = $2 and year = $3', [e.id, el.id, year]);
+    const [quota] = await sql<{ q: number }>(pg, 'select annual_quota::float q from leave_types where id = $1', [el.id]);
+    expect(next.allocated).toBe(quota.q + (el.carry_forward ? prev.allocated - 2 : 0));
+    await expect(as('hr').rpc('allocate_year_balances', { p_company: ids.company, p_year: year + 1 })).rejects.toThrow();
+  });
 });
