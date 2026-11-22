@@ -28,6 +28,9 @@ tables, and the old frontend (one Realtime channel for all chat tables) then rec
    ```
    Status 2026-11-22: 1200-1900 are all applied to the live project; public_signup = false (internal HRMS: invitation only);
    app_url = https://connect.smpatelithub.in; edge function employee-auth deployed (`npx supabase functions deploy employee-auth`).
+   Migrations up to 2400 applied (22 Nov). Scheduled in Supabase (pg_cron): `hrms-daily-jobs` hourly at :07
+   (`select public.run_daily_jobs()`), `hrms-send-emails` every 5 min (pg_net POST to the process-emails function with the
+   public anon key), `hrms-interview-reminders` every 15 min. Auth: passwords min 8 characters with letters and digits.
 4. Run the live tests (`npm run test:live`, `SUPABASE_LIVE=1 npx playwright test --project=supabase`).
 
 Rollback for this upgrade: see section 6. **Never roll the frontend back to a pre-1200 build while migration 1200 is

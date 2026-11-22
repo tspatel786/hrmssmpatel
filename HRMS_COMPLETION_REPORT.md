@@ -186,3 +186,18 @@ Hand-offs between workflows were tested with `tests/db/workflow_gaps.test.ts` (7
 Status: **applied live 22 Nov and merged to `main`**. Full suite 185 passed (run with 2 workers to fit memory); live tests re-run after the migration. An earlier full-suite run was stopped
 by Claude Code for low memory, so migration 2100 is **committed to `product` but not yet applied live or merged to `main`**
 (a rollback snapshot and dry run are ready). No live employee was affected: the live company has no employees yet.
+
+## 13. Whole-system gap check (22 Nov, migration 2400 + live configuration)
+
+| # | Gap | Fix (live) |
+|---|---|---|
+| 1 | Leave balances only after HR "Allocate" or a leave application; yearly carry-forward manual | New employees get pro-rated balances; daily job allocates each new year with carry-forward (migration 2400) |
+| 2 | No holidays: daily job would mark everyone absent on public holidays | National holidays 2026–27 added (Christmas 2026; Republic Day, Maharashtra Day, Independence Day, Gandhi Jayanti, Christmas 2027). Festivals to be added by HR each year |
+| 3 | Legal name/phone/address empty: letters signed "For Smpatelithub" | Filled from the letterhead (S.M. Patel IT Hub, 9112427821, Mangalwedha, Maharashtra 413305) |
+| 4 | No company logo on careers / offer / joining-documents pages | Logo uploaded |
+| 5 | Emails queued by background jobs waited for the next user action; daily jobs ran only when the app was used | pg_cron: daily jobs hourly, email sending every 5 minutes (verified: HTTP 200, Resend mode) |
+| 6 | Server accepted 6-character passwords (app requires 8 + letters + digits) | Auth policy set to 8 characters with letters and digits |
+
+Verified already fine: real email delivery (Resend, no test redirect), RLS on every table, Asia/Kolkata time zone, INR, 24 email templates.
+Owner items: add yourself as an employee if you want self-service; signatory name/designation; festival holidays; revoke the access token.
+
