@@ -36,6 +36,8 @@ describe('attendance & leave acceptance', () => {
     await employee('lead');
     await employee('dev', 'lead');
     await employee('ops'); // not in the lead's team
+    // these staff were added to the HRMS weeks ago (absences are only marked from the day an employee is added; migration 2100)
+    await sql(pg, "update employees set created_at = now() - interval '60 days' where company_id = $1", [ids.company]);
   }, 180_000);
 
   it('working hours are computed from check-in/out (company time zone) and summed in the report', async () => {

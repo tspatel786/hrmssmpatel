@@ -168,3 +168,21 @@ exit letters emailed, document self-upload/verify/reject/history, company docume
 3. Before any schema change, also save the affected function definitions (done automatically in `supabase/.temp/backup-before-*.sql` during this project).
 4. Restore: re-create the schema with `node scripts/supabase-apply.mjs` on a fresh project, then import the JSON files table by table in
    dependency order (companies → roles → employees → …) with the service role.
+
+## 12. Workflow gap check (22 Nov, migration 2100)
+
+Hand-offs between workflows were tested with `tests/db/workflow_gaps.test.ts` (7 cases). Gaps confirmed and fixed:
+
+| # | Gap | Impact | Fix |
+|---|---|---|---|
+| G1 | Adding existing staff (old joining date) marked them **absent for the previous week** | False loss-of-pay in payroll | Absences start the day after the employee is added to the HRMS |
+| G2 | A holiday added later left automatic absences on that day | False absences | Adding a holiday clears automatic absences that day |
+| G3 | During notice, leave could run past the last working day | Leave after exit | Refused |
+| G4 | A resigning manager's reports kept pointing to them | Approvals stuck with an inactive account | Checklist item "Reassign N direct reports"; at deactivation remaining reports move to the leaver's manager |
+| G5 | Exit left pending leave/corrections open; **leavers were excluded from their last month's payroll** | No final payslip | Pending requests cancelled at exit; payroll includes leavers of the month |
+| G6 | Hiring an employee via internal application failed ("employee already exists") | Internal moves impossible | Updates the existing record — same Employee ID and login |
+| G7 | No probation confirmation step | Probation never ends | Reminders 7 days before / on the end date; HR **Probation review** (confirm or extend) on the employee page |
+
+Status: all 7 gap tests pass, plus the affected suites (attendance/leave acceptance, exit & documents). The full-suite run was stopped
+by Claude Code for low memory, so migration 2100 is **committed to `product` but not yet applied live or merged to `main`**
+(a rollback snapshot and dry run are ready). No live employee was affected: the live company has no employees yet.

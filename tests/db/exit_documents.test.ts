@@ -34,6 +34,7 @@ describe('exit, documents and daily jobs (migration 2000)', () => {
     await employee('mgr', 'Manav');
     await employee('emp', 'Esha', { manager_id: ids.mgrEmp, date_of_birth: '1995-' + addDays(today, 5).slice(5) });
     await employee('peer', 'Pavan', { manager_id: ids.mgrEmp });
+    await sql(pg, "update employees set created_at = now() - interval '60 days' where company_id = $1", [ids.company]); // added weeks ago
     ids.other = await createUser(pg, 'owner@other.test');
     ids.otherCompany = await as('other').rpc<string>('create_company', { p_name: 'Other Co', p_slug: 'other-co' });
   }, 180_000);

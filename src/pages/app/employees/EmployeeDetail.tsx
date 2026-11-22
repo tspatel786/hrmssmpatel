@@ -1,9 +1,10 @@
-import { ArrowLeft, Download, Eye, FileSignature, FileText, KeyRound, Mail, MapPin, Pencil, Phone, Send, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Download, Eye, FileSignature, FileText, KeyRound, Mail, MapPin, Pencil, Phone, Send, Trash2, Upload } from 'lucide-react';
+
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StatusBadge } from '@/components/DataTable';
-import { Avatar, Badge, Button, Card, ConfirmDialog, DescriptionList, EmptyState, ErrorState, Field, Modal, PageLoader, Select, Tabs } from '@/components/ui';
+import { Avatar, Badge, Button, Card, ConfirmDialog, DescriptionList, EmptyState, ErrorState, Field, Input, Modal, PageLoader, Select, Tabs } from '@/components/ui';
 import { useCompany } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { appBaseUrl } from '@/lib/config';
@@ -45,6 +46,11 @@ export function EmployeeDetail() {
   // Employee ID + one-time set-password link (migration 1900); works for staff added before the HRMS too
   const sendLogin = useAction(() => api.db.rpc('send_employee_login', { p_employee: id }), { success: 'Employee ID and set-password link emailed' });
   const sendAppointment = useAction(() => issueAppointmentLetter(id, company!), { success: 'Appointment letter saved to documents and emailed' });
+  // probation review (migration 2100): confirm employment or extend the probation end date
+  const [probation, setProbation] = useState<{ extendTo: string; note: string } | null>(null);
+  const decideProbation = useAction(({ confirm }: { confirm: boolean }) => api.db.rpc('decide_probation', {
+    p_employee: id, p_confirm: confirm, p_extend_to: confirm ? null : probation?.extendTo || null, p_note: probation?.note || null,
+  }), { success: 'Probation decision saved · employee notified', onSuccess: () => setProbation(null) });
   const invite = useAction(() => api.db.rpc<{ status: string }>('invite_member', { p_company: companyId, p_email: q.data!.rows[0].email, p_role: role, p_employee: id, p_base_url: appBaseUrl() }), {
     success: (r) => (r.status === 'invited' ? 'Invitation email queued' : 'Access granted'), onSuccess: () => setInviting(false),
   });
@@ -93,6 +99,7 @@ export function EmployeeDetail() {
               {!e.user_id && <Button icon={<Send className="h-4 w-4" />} loading={sendLogin.isPending} onClick={() => sendLogin.mutate()} title="Emails the Employee ID and a one-time link to set a password">Send login email</Button>}
               {!e.user_id && can('users.manage') && <Button variant="secondary" icon={<KeyRound className="h-4 w-4" />} onClick={() => { setRole(roles.rows.find((r) => r.name === 'Employee')?.id as string ?? ''); setInviting(true); }}>Give access with role</Button>}
               <Button variant="secondary" icon={<FileSignature className="h-4 w-4" />} loading={sendAppointment.isPending} onClick={() => sendAppointment.mutate()}>Appointment letter</Button>
+              {e.status === 'probation' && <Button variant="secondary" icon={<BadgeCheck className="h-4 w-4" />} onClick={() => setProbation({ extendTo: '', note: '' })}>Probation review</Button>}
               <Button variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>Edit</Button>
               <Button variant="ghost" aria-label="Delete employee" onClick={() => setDeleting(true)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
             </div>
@@ -199,6 +206,15 @@ export function EmployeeDetail() {
         )}
       </div>
       {editing && <EmployeeForm open employee={e} onClose={() => setEditing(false)} />}
+      <Modal open={!!probation} onClose={() => setProbation(null)} title="Probation review" size="sm"
+        footer={<>
+          <Button variant="secondary" disabled={!probation?.extendTo} loading={decideProbation.isPending} onClick={() => decideProbation.mutate({ confirm: false })}>Extend probation</Button>
+          <Button variant="success" loading={decideProbation.isPending} onClick={() => decideProbation.mutate({ confirm: true })}>Confirm employment</Button>
+        </>}>
+        <p className="text-sm text-slate-600">Probation ends {fmtDate(q.data?.rows[0]?.probation_end_date ?? null)}. Confirming makes the employee active; extending sets a new end date. The employee is notified either way.</p>
+        <Field label="New probation end (only to extend)" className="mt-4"><Input type="date" value={probation?.extendTo ?? ''} onChange={(ev) => setProbation((v) => v && { ...v, extendTo: ev.target.value })} /></Field>
+        <Field label="Note to the employee (optional)" className="mt-3"><Input value={probation?.note ?? ''} onChange={(ev) => setProbation((v) => v && { ...v, note: ev.target.value })} maxLength={300} /></Field>
+      </Modal>
       <ConfirmDialog open={deleting} onClose={() => setDeleting(false)} loading={remove.isPending} tone="danger" confirmLabel="Delete employee" title="Delete employee?"
         message="This permanently deletes the employee with their attendance, leave and payslips. To keep history, set the status to Inactive or Terminated instead." onConfirm={() => remove.mutate()} />
       <Modal open={inviting} onClose={() => setInviting(false)} title="Give HRMS access" size="sm"
