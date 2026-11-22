@@ -302,8 +302,15 @@
 .dark .text-brand-600 { color: #e6bc45; }
 .dark .hover\:text-brand-700:hover { color: #f5e09a; }
 .dark .card { background-color: #0f0f0f; border-color: rgb(42 42 42 / 0.8); box-shadow: none; }
-.dark .input { background-color: #0b1222; border-color: #2a2a2a; color: #f1f5f9; }
-.dark .input:disabled { background-color: #1a1a1a; color: #64748b; }
+.dark .input { background-color: #121212; border-color: #2e2e2e; color: #f1f5f9; }
+.dark .input:focus { border-color: #d4af37; }
+.dark select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%23a8a8a8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.dark input::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+.dark input[type='file'] { color: #a8a8a8; }
+.dark input[type='file']::file-selector-button { background-color: #1a1a1a; border-color: #2e2e2e; color: #e2e8f0; }
+.dark input[type='file']::file-selector-button:hover { background-color: #2a2a2a; }
+.dark input[type='checkbox'], .dark input[type='radio'] { accent-color: #d4af37; color-scheme: dark; }
+.dark .input:disabled { background-color: #1a1a1a; color: #6b6b6b; }
 .dark .input::placeholder { color: #64748b; }
 .dark .label { color: #cbd5e1; }
 .dark .hint { color: #94a3b8; }

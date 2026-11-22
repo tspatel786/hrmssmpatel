@@ -116,7 +116,7 @@ export function InternalOpenings() {
           defaultValues={{ first_name: '', last_name: '', email: '', phone: '', note: '' }} onSubmit={submitReferral} submitLabel="Submit referral" size="md">
           <label className="mt-4 block text-sm">
             <span className="label">Resume (optional, PDF or Word, max 5 MB)</span>
-            <input type="file" accept=".pdf,.doc,.docx" className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2"
+            <input type="file" accept=".pdf,.doc,.docx" className="block w-full"
               onChange={(e) => setResume(e.target.files?.[0] ?? null)} />
           </label>
         </FormModal>

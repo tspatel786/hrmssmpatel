@@ -93,7 +93,7 @@ export function AddCandidateModal({ open, onClose, jobId }: { open: boolean; onC
     <FormModal open={open} onClose={() => { setFile(null); onClose(); }} title="Add candidate" size="xl" schema={schema} fields={fields}
       defaultValues={{ source: 'direct', skills: [], job_id: jobId ?? '' } as never} onSubmit={(v) => add.mutateAsync(v)} submitLabel="Add candidate">
       <Field label="Resume" className="mt-4" error={fileError} hint="PDF or Word, max 5 MB">
-        <input type="file" accept=".pdf,.doc,.docx" className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm"
+        <input type="file" accept=".pdf,.doc,.docx" className="block w-full"
           onChange={(e) => {
             const f = e.target.files?.[0];
             setFileError('');

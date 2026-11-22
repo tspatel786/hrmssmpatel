@@ -162,7 +162,7 @@ function Balances({ companyId }: { companyId: string }) {
       <DataTable table={table} columns={columns} searchPlaceholder="Search employee" exportName={`leave-balances-${year}`}
         filters={[{ key: 'leave_type_id', label: 'Types', options: types.options }]}
         toolbar={<>
-          <Select className="w-auto py-1.5" value={year} onChange={(e) => setYear(e.target.value)} aria-label="Year" options={[-1, 0, 1].map((d) => String(new Date().getFullYear() + d)).map((y) => ({ value: y, label: y }))} />
+          <Select className="w-auto h-9" value={year} onChange={(e) => setYear(e.target.value)} aria-label="Year" options={[-1, 0, 1].map((d) => String(new Date().getFullYear() + d)).map((y) => ({ value: y, label: y }))} />
           {manage && <Button size="sm" variant="secondary" loading={allocate.isPending} onClick={() => allocate.mutate()}>Allocate {year}</Button>}
         </>}
         rowActions={manage ? (b) => <Button size="sm" variant="ghost" aria-label="Edit balance" onClick={() => { setEditing(b); setAllocated(String(b.allocated)); }}><Pencil className="h-4 w-4" /></Button> : undefined}

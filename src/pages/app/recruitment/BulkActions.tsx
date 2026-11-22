@@ -35,7 +35,7 @@ export function BulkApplicationActions({ selected, clear }: { selected: Applicat
     selected.map((a) => [a.candidate_name, a.candidate_email, a.candidate_phone, a.stage, a.experience_years, a.applied_at]));
   return (
     <>
-      <Select className="w-44 py-1.5" value={stage} onChange={(e) => setStage(e.target.value)} options={MOVABLE.map((s) => ({ value: s.value, label: s.label }))} placeholder="Move to stage…" aria-label="Move to stage" />
+      <Select className="w-44 h-9" value={stage} onChange={(e) => setStage(e.target.value)} options={MOVABLE.map((s) => ({ value: s.value, label: s.label }))} placeholder="Move to stage…" aria-label="Move to stage" />
       <Button size="sm" disabled={!stage} loading={move.isPending} onClick={() => move.mutate(stage)}>Apply</Button>
       <Button size="sm" variant="secondary" icon={<XCircle className="h-4 w-4 text-rose-500" />} onClick={() => setRejecting(true)}>Reject</Button>
       <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={exportRows}>Export</Button>

@@ -238,7 +238,7 @@ export function CandidateDetail() {
                 <div>
                   {manage && (
                     <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-4">
-                      <Select className="w-auto py-1.5" value={docType} onChange={(e) => setDocType(e.target.value)} options={DOC_TYPES} aria-label="Document type" />
+                      <Select className="w-auto h-9" value={docType} onChange={(e) => setDocType(e.target.value)} options={DOC_TYPES} aria-label="Document type" />
                       <Button size="sm" variant="secondary" icon={<Upload className="h-4 w-4" />} loading={upload.isPending} onClick={() => fileRef.current?.click()}>Upload document</Button>
                       <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload.mutate(f); e.target.value = ''; }} />
                     </div>

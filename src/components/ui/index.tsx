@@ -67,7 +67,7 @@ export interface Option {
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement> & { options: Option[]; placeholder?: string; invalid?: boolean }>(
   function Select({ options, placeholder, className, invalid, ...rest }, ref) {
     return (
-      <select ref={ref} className={clsx('input pr-8', invalid && 'input-error', className)} aria-invalid={invalid || undefined} {...rest}>
+      <select ref={ref} className={clsx('input', invalid && 'input-error', className)} aria-invalid={invalid || undefined} {...rest}>
         {placeholder !== undefined && <option value="">{placeholder}</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>

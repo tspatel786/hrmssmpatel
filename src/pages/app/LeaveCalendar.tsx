@@ -30,7 +30,7 @@ export function LeaveCalendar({ companyId }: { companyId: string }) {
 
   return (
     <Card title={<span className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-brand-600" />Team calendar · {format(month, 'MMMM yyyy')}</span>} actions={<>
-      {companyWide && <Select className="w-44 py-1.5" value={dept} onChange={(e) => setDept(e.target.value)} options={depts.options} placeholder="All departments" aria-label="Department" />}
+      {companyWide && <Select className="w-44 h-9" value={dept} onChange={(e) => setDept(e.target.value)} options={depts.options} placeholder="All departments" aria-label="Department" />}
       <Button size="sm" variant="ghost" aria-label="Previous month" onClick={() => setMonth(addMonths(month, -1))}><ChevronLeft className="h-4 w-4" /></Button>
       <Button size="sm" variant="secondary" onClick={() => setMonth(startOfMonth(new Date()))}>Today</Button>
       <Button size="sm" variant="ghost" aria-label="Next month" onClick={() => setMonth(addMonths(month, 1))}><ChevronRight className="h-4 w-4" /></Button>

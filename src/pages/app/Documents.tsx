@@ -102,7 +102,7 @@ function MyDocuments({ companyId, employeeId }: { companyId: string; employeeId:
     <div className="space-y-5">
       <Card title="Upload a document">
         <form className="grid gap-3 md:grid-cols-[1fr_180px_170px_auto] md:items-end" onSubmit={(e) => { e.preventDefault(); if (form.file) upload.mutate(); }}>
-          <Field label="File (PDF, JPG, PNG or Word · max 10 MB)"><input type="file" accept={ACCEPT} aria-label="Document file" className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2"
+          <Field label="File (PDF, JPG, PNG or Word · max 10 MB)"><input type="file" accept={ACCEPT} aria-label="Document file" className="block w-full"
             onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} /></Field>
           <Field label="Type"><Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={SELF_TYPES.map((t) => ({ value: t, label: typeLabel(t) }))} aria-label="Document type" /></Field>
           <Field label="Expiry date (if any)"><Input type="date" value={form.expiry} onChange={(e) => setForm({ ...form, expiry: e.target.value })} /></Field>
@@ -141,7 +141,7 @@ function EmployeeDocuments({ companyId, mode }: { companyId: string; mode: 'veri
 
   return (
     <Card padded={false} title={mode === 'verify' ? 'Documents waiting for verification' : mode === 'expiring' ? 'Expired or expiring within 30 days' : 'All employee documents'}
-      actions={mode === 'all' && <Select className="w-44 py-1.5" value={type} onChange={(e) => setType(e.target.value)} options={[{ value: '', label: 'All types' }, ...ALL_TYPES.map((t) => ({ value: t, label: typeLabel(t) }))]} aria-label="Filter by type" />}>
+      actions={mode === 'all' && <Select className="w-44 h-9" value={type} onChange={(e) => setType(e.target.value)} options={[{ value: '', label: 'All types' }, ...ALL_TYPES.map((t) => ({ value: t, label: typeLabel(t) }))]} aria-label="Filter by type" />}>
       {docs.isLoading ? <PageLoader /> : rows.length === 0 ? <EmptyState icon={<FileText className="h-6 w-6" />} title={mode === 'verify' ? 'Nothing to verify' : 'No documents'} /> : (
         <ul className="divide-y divide-slate-100" data-testid={`documents-${mode}`}>
           {rows.map((d) => <DocRow key={d.id} d={d} who={name.get(d.employee_id)} actions={<>
@@ -212,7 +212,7 @@ function CompanyDocuments({ companyId, canManage }: { companyId: string; canMana
           <Field label="Category"><Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={['policy', 'handbook', 'form', 'agreement', 'certificate', 'other'].map((v) => ({ value: v, label: titleCase(v) }))} /></Field>
           <Field label="Who can see it"><Select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })} options={[{ value: 'all', label: 'All employees' }, { value: 'hr', label: 'HR and admins only' }]} /></Field>
           <Field label="Expiry date (optional)"><Input type="date" value={form.expiry} onChange={(e) => setForm({ ...form, expiry: e.target.value })} /></Field>
-          <Field label="File (max 10 MB)" required><input type="file" accept={ACCEPT} aria-label="Company document file" className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} /></Field>
+          <Field label="File (max 10 MB)" required><input type="file" accept={ACCEPT} aria-label="Company document file" className="block w-full" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} /></Field>
         </div>
       </Modal>
       <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} tone="danger" confirmLabel="Delete" loading={remove.isPending}

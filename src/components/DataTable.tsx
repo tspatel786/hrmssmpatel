@@ -83,10 +83,10 @@ export function DataTable<T extends { id?: string | number }>({
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center">
-        {searchPlaceholder && <SearchInput className="lg:w-72" value={table.search} onChange={table.setSearch} placeholder={searchPlaceholder} />}
+        {searchPlaceholder && <SearchInput className="lg:w-56" value={table.search} onChange={table.setSearch} placeholder={searchPlaceholder} />}
         <div className="flex flex-1 flex-wrap items-center gap-2">
           {filters.map((f) => (
-            <Select key={f.key} className="w-auto min-w-[140px] py-1.5" aria-label={f.label} value={table.filters[f.key] ?? ''}
+            <Select key={f.key} className="w-full sm:w-auto sm:max-w-[13rem]" aria-label={f.label} value={table.filters[f.key] ?? ''}
               onChange={(e) => table.setFilter(f.key, e.target.value)} options={f.options} placeholder={`All ${f.label.toLowerCase()}`} />
           ))}
           {table.hasActiveFilters && (

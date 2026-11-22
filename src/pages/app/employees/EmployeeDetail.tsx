@@ -185,7 +185,7 @@ export function EmployeeDetail() {
         )}
         {tab === 'documents' && (
           <Card title="Employee documents" actions={manage && <>
-            <Select className="w-auto py-1.5" value={docType} onChange={(ev) => setDocType(ev.target.value)} options={EMP_DOC_TYPES} aria-label="Document type" />
+            <Select className="w-auto h-9" value={docType} onChange={(ev) => setDocType(ev.target.value)} options={EMP_DOC_TYPES} aria-label="Document type" />
             <Button size="sm" variant="secondary" icon={<Upload className="h-4 w-4" />} loading={uploadDoc.isPending} onClick={() => fileRef.current?.click()}>Upload</Button>
             <input ref={fileRef} type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={(ev) => { const f = ev.target.files?.[0]; if (f) uploadDoc.mutate(f); ev.target.value = ''; }} /></>}>
             <p className="mb-3 text-sm text-slate-500">Stored privately — visible only to HR and the employee.</p>

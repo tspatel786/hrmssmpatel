@@ -216,9 +216,9 @@ function Records({ companyId, employeeIds }: { companyId: string; employeeIds?: 
   return (
     <DataTable table={table} columns={columns} searchPlaceholder="Search employee" exportName={employeeIds ? 'team-attendance' : 'attendance'}
       toolbar={<div className="flex items-center gap-2">
-        <Input type="date" className="w-auto py-1.5" aria-label="From date" value={table.filters.attendance_date__from ?? ''} onChange={(e) => table.setFilter('attendance_date__from', e.target.value)} />
+        <Input type="date" className="w-auto h-9" aria-label="From date" value={table.filters.attendance_date__from ?? ''} onChange={(e) => table.setFilter('attendance_date__from', e.target.value)} />
         <span className="text-slate-400">–</span>
-        <Input type="date" className="w-auto py-1.5" aria-label="To date" value={table.filters.attendance_date__to ?? ''} onChange={(e) => table.setFilter('attendance_date__to', e.target.value)} />
+        <Input type="date" className="w-auto h-9" aria-label="To date" value={table.filters.attendance_date__to ?? ''} onChange={(e) => table.setFilter('attendance_date__to', e.target.value)} />
       </div>}
       filters={[{ key: 'status', label: 'Status', options: ATTENDANCE_STATUSES }, { key: 'department_id', label: 'Departments', options: depts.options }]}
       empty={{ icon: <CalendarCheck className="h-6 w-6" />, title: 'No attendance records' }} />

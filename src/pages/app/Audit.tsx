@@ -36,9 +36,9 @@ export function Audit() {
       <PageHeader title="Audit logs" description="Tamper-evident record of every create, update and delete across the company." />
       <DataTable table={table} columns={columns} searchPlaceholder="Search actor or entity" exportName="audit-logs" onRowClick={setViewing}
         toolbar={<div className="flex items-center gap-2">
-          <Input type="date" className="w-auto py-1.5" aria-label="From" value={table.filters.created_at__from ?? ''} onChange={(e) => table.setFilter('created_at__from', e.target.value)} />
+          <Input type="date" className="w-auto h-9" aria-label="From" value={table.filters.created_at__from ?? ''} onChange={(e) => table.setFilter('created_at__from', e.target.value)} />
           <span className="text-slate-400">–</span>
-          <Input type="date" className="w-auto py-1.5" aria-label="To" value={(table.filters.created_at__to ?? '').slice(0, 10)} onChange={(e) => table.setFilter('created_at__to', e.target.value ? `${e.target.value}T23:59:59` : '')} />
+          <Input type="date" className="w-auto h-9" aria-label="To" value={(table.filters.created_at__to ?? '').slice(0, 10)} onChange={(e) => table.setFilter('created_at__to', e.target.value ? `${e.target.value}T23:59:59` : '')} />
         </div>}
         filters={[{ key: 'action', label: 'Actions', options: opts(['INSERT', 'UPDATE', 'DELETE'], (v) => v) }, { key: 'table_name', label: 'Entities', options: opts(TABLES) }]}
         empty={{ icon: <History className="h-6 w-6" />, title: 'No audit entries' }} />

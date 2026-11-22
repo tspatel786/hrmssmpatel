@@ -85,7 +85,7 @@ export function Interviews() {
           {can('interviews.view') && (
             <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="rounded border-slate-300" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Only my interviews</label>
           )}
-          <Select className="w-auto py-1.5" value={status} onChange={(e) => setStatus(e.target.value)} placeholder="All statuses" aria-label="Status"
+          <Select className="w-auto h-9" value={status} onChange={(e) => setStatus(e.target.value)} placeholder="All statuses" aria-label="Status"
             options={['scheduled', 'completed', 'cancelled', 'no_show'].map((s) => ({ value: s, label: titleCase(s) }))} />
           <Tabs className="border-0" value={view} onChange={setView} tabs={[{ value: 'month', label: 'Month' }, { value: 'week', label: 'Week' }, { value: 'list', label: 'List' }]} />
         </div>
