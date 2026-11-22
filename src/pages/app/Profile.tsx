@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Avatar, Badge, Button, Card, Field, Input, PageHeader, PageLoader } from '@/components/ui';
+import { Avatar, Badge, Button, Card, Field, Input, PageHeader, PageLoader, Select } from '@/components/ui';
 import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { useAction, useRecord, useRpc } from '@/lib/hooks';
@@ -39,6 +39,7 @@ export function Profile() {
             <div className="sm:col-span-2"><Button type="submit" loading={save.isPending}>Save profile</Button></div>
           </form>
         </Card>
+        {companyId && me.data?.employee && <MyDetails companyId={companyId} employeeId={me.data.employee.id} />}
         <div className="space-y-5">
           <Card title="Employment">
             {me.data?.employee ? (
@@ -69,5 +70,39 @@ export function Profile() {
         </div>
       </div>
     </>
+  );
+}
+
+interface Details { phone: string; address: string; city: string; state: string; postal_code: string; emergency_contact_name: string; emergency_contact_phone: string; marital_status: string }
+const EMPTY: Details = { phone: '', address: '', city: '', state: '', postal_code: '', emergency_contact_name: '', emergency_contact_phone: '', marital_status: '' };
+
+/** Employee self-service: contact details on their own employee record (migration 2700). Bank and salary stay with HR. */
+function MyDetails({ companyId, employeeId }: { companyId: string; employeeId: string }) {
+  const rec = useRecord<Record<string, string | null>>('employees', employeeId);
+  const [d, setD] = useState<Details>(EMPTY);
+  useEffect(() => {
+    if (rec.data) setD(Object.fromEntries(Object.keys(EMPTY).map((k) => [k, rec.data?.[k] ?? ''])) as unknown as Details);
+  }, [rec.data]);
+  const save = useAction(() => api.db.rpc('update_my_details', { p_company: companyId, p_details: d }), { success: 'Your details were updated · HR has been notified' });
+  const f = (k: keyof Details) => ({ value: d[k], onChange: (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value }) });
+  if (rec.isLoading) return null;
+  return (
+    <Card className="lg:col-span-2" title="My details">
+      <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); save.mutate(); }} data-testid="my-details">
+        <Field label="Mobile number" htmlFor="md-phone"><Input id="md-phone" type="tel" {...f('phone')} /></Field>
+        <Field label="Marital status" htmlFor="md-marital">
+          <Select id="md-marital" {...f('marital_status')} placeholder="— Not set —" options={[{ value: 'single', label: 'Single' }, { value: 'married', label: 'Married' }, { value: 'other', label: 'Other' }]} />
+        </Field>
+        <Field label="Address" htmlFor="md-addr" className="sm:col-span-2"><Input id="md-addr" maxLength={300} {...f('address')} /></Field>
+        <Field label="City" htmlFor="md-city"><Input id="md-city" maxLength={80} {...f('city')} /></Field>
+        <Field label="State" htmlFor="md-state"><Input id="md-state" maxLength={80} {...f('state')} /></Field>
+        <Field label="Postal code" htmlFor="md-pin"><Input id="md-pin" maxLength={12} {...f('postal_code')} /></Field>
+        <div className="hidden sm:block" />
+        <Field label="Emergency contact name" htmlFor="md-ecn"><Input id="md-ecn" maxLength={100} {...f('emergency_contact_name')} /></Field>
+        <Field label="Emergency contact phone" htmlFor="md-ecp"><Input id="md-ecp" type="tel" {...f('emergency_contact_phone')} /></Field>
+        <p className="text-xs text-slate-500 sm:col-span-2">Bank account, PAN, salary and job details are managed by HR — ask them to change those.</p>
+        <div className="sm:col-span-2"><Button type="submit" loading={save.isPending}>Save my details</Button></div>
+      </form>
+    </Card>
   );
 }

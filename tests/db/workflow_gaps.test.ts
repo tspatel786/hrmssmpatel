@@ -202,4 +202,30 @@ describe('workflow hand-off gaps', () => {
     const [after] = await sql<{ status: string }>(pg, 'select status from offers where id = $1', [o.id]);
     expect(after.status).toBe('expired');
   });
+
+  it('G11 terminating or deleting an employee closes their login; reactivating reopens it; last admin is protected', async () => {
+    await employee('term');
+    const member = async () => (await sql<{ status: string }>(pg, 'select status from company_members where company_id = $1 and user_id = $2', [ids.company, ids.term]))[0]?.status;
+    await as('hr').update('employees', ids.termEmp, { status: 'terminated' });
+    expect(await member()).toBe('inactive');
+    await expect(as('term').rpc('my_dashboard', { p_company: ids.company })).rejects.toThrow();
+    await as('hr').update('employees', ids.termEmp, { status: 'active' });
+    expect(await member()).toBe('active');
+    await as('hr').remove('employees', ids.termEmp);
+    expect(await member()).toBe('inactive');
+    // the only Company Admin cannot lock themselves out through their employee record
+    const me = await as('hr').insert<{ id: string }>('employees', { company_id: ids.company, first_name: 'Admin', last_name: 'Self', email: 'hr@gap.test', joining_date: addDays(today, -100) });
+    await sql(pg, 'update company_members set employee_id = $1 where company_id = $2 and user_id = $3', [me.id, ids.company, ids.hr]);
+    await expect(as('hr').update('employees', me.id, { status: 'terminated' })).rejects.toThrow(/only active Company Admin/);
+  });
+
+  it('G12 employees update their own contact details (not bank/salary); HR is notified', async () => {
+    await employee('self');
+    await as('self').rpc('update_my_details', { p_company: ids.company, p_details: { phone: '+91 98765 43210', address: 'Plot 4, Station Road', city: 'Solapur', emergency_contact_name: 'Asha', emergency_contact_phone: '9000000009', marital_status: 'married' } });
+    const [e] = await sql<{ phone: string; city: string; emergency_contact_name: string; marital_status: string }>(pg, 'select phone, city, emergency_contact_name, marital_status from employees where id = $1', [ids.selfEmp]);
+    expect(e).toEqual({ phone: '+91 98765 43210', city: 'Solapur', emergency_contact_name: 'Asha', marital_status: 'married' });
+    await expect(as('self').rpc('update_my_details', { p_company: ids.company, p_details: { phone: 'call me' } })).rejects.toThrow(/valid phone/);
+    await expect(as('self').update('employees', ids.selfEmp, { bank_account_number: '999' })).rejects.toThrow();
+    expect((await sql<{ title: string }>(pg, 'select title from notifications where user_id = $1', [ids.hr])).map((n) => n.title)).toContain('Details updated by self Test');
+  });
 });
