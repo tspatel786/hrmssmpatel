@@ -4,12 +4,15 @@ import { api } from '@/lib/backend';
 import { generateAppointmentPdf, generateExitLetterPdf, loadLetterhead, type PdfCompany } from '@/lib/pdf';
 
 const cache = new Map<string, Promise<PdfCompany['letterhead']>>();
+const sigCache = new Map<string, Promise<PdfCompany['signature']>>();
 
-/** The company as the PDF generator needs it, with letterhead images loaded (cached per image pair). */
+/** The company as the PDF generator needs it, with letterhead and signature images loaded (cached per URL). */
 export async function pdfCompany(company: Company): Promise<PdfCompany> {
   const key = `${company.letterhead_header_url ?? ''}|${company.letterhead_footer_url ?? ''}`;
   if (!cache.has(key)) cache.set(key, loadLetterhead(company.letterhead_header_url, company.letterhead_footer_url));
-  return { ...company, letterhead: await cache.get(key)! };
+  const sig = company.signature_url ?? '';
+  if (!sigCache.has(sig)) sigCache.set(sig, sig ? loadLetterhead(sig, null).then((l) => l?.header ?? null) : Promise.resolve(null));
+  return { ...company, letterhead: await cache.get(key)!, signature: await sigCache.get(sig)! };
 }
 
 interface EmpRow {

@@ -18,6 +18,10 @@ export interface PdfCompany {
   currency?: string | null;
   /** Company letterhead images (data URLs + pixel size), drawn full-width on every page of letters. */
   letterhead?: Letterhead | null;
+  /** Authorised signatory's signature image and optional name / title, printed in the sign-off of letters. */
+  signature?: LetterheadImage | null;
+  signatory_name?: string | null;
+  signatory_title?: string | null;
 }
 
 export interface LetterheadImage { data: string; width: number; height: number }
@@ -163,6 +167,23 @@ function footer(doc: jsPDF, text: string, lh?: Letterhead | null) {
   }
 }
 
+/** "For <company>", the signature image (when configured), name / title and "Authorised Signatory". */
+function signOff(doc: jsPDF, k: Cursor, c: PdfCompany, gapAfter = 18) {
+  const org = c.legal_name || c.name;
+  k.ensure(130);
+  k.para(`For ${org}`, { bold: true, gap: 4 });
+  if (c.signature) {
+    const h = 42;
+    const w = Math.min(160, (h * c.signature.width) / c.signature.height);
+    doc.addImage(c.signature.data, imgFormat(c.signature.data), 40, k.y - 4, w, h, 'signature', 'FAST');
+    k.y += h + 4;
+  } else {
+    k.y += 22;
+  }
+  if (c.signatory_name?.trim()) k.para(c.signatory_name.trim(), { bold: true, size: 10, gap: 0 });
+  k.para(c.signatory_title?.trim() ? `${c.signatory_title.trim()} · Authorised Signatory` : 'Authorised Signatory', { size: 9.5, gap: gapAfter });
+}
+
 class Cursor {
   y: number;
   private top: number;
@@ -267,10 +288,8 @@ export function generateOfferPdf(o: OfferPdfData): Blob {
   cur2.para(t ? renderOfferText(t.closing, o) :
     `Please confirm your acceptance by ${fmtDate(o.expiry_date)} using the secure link shared with you by email. This offer lapses automatically if not accepted by that date.`,
   );
-  cur2.ensure(120);
   cur2.y += 10;
-  cur2.para(`For ${c.legal_name || c.name}`, { bold: true, gap: 26 });
-  cur2.para('Authorised Signatory', { size: 9.5, gap: 18 });
+  signOff(doc, cur2, c, 18);
   if (o.candidate_signature) {
     doc.setDrawColor(16, 185, 129);
     doc.setFillColor(236, 253, 245);
@@ -368,9 +387,7 @@ export function generateAppointmentPdf(a: AppointmentPdfData): Blob {
   ];
   terms.forEach((t, i) => k.para(`${String.fromCharCode(97 + i)}) ${t}`, { size: 10, gap: 3 }));
   k.para('We welcome you to the team and wish you a long and rewarding career with us.', { gap: 10 });
-  k.ensure(130);
-  k.para(`For ${org}`, { bold: true, gap: 30 });
-  k.para('Authorised Signatory', { size: 9.5, gap: 22 });
+  signOff(doc, k, c, 22);
   k.para('Acceptance', { bold: true, size: 10.5, gap: 2 });
   k.para(`I have read and accept the terms of this appointment.          Signature: ____________________          Date: ____________`, { size: 9.5 });
   footer(doc, `APT/${a.employee_code} · Private & confidential`, c.letterhead);
@@ -419,9 +436,7 @@ export function generateExitLetterPdf(x: ExitLetterPdfData): Blob {
     k.para(`During this period we found ${x.employee_name.split(' ')[0]} to be sincere, hardworking and professional. Their conduct with colleagues and clients was good.`);
     k.para('We wish them every success in their future career.', { gap: 16 });
   }
-  k.ensure(100);
-  k.para(`For ${org}`, { bold: true, gap: 30 });
-  k.para('Authorised Signatory', { size: 9.5 });
+  signOff(doc, k, c, 6);
   footer(doc, `${relieving ? 'REL' : 'EXP'}/${x.employee_code}`, c.letterhead);
   return doc.output('blob');
 }

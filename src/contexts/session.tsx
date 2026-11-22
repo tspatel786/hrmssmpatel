@@ -33,6 +33,10 @@ export interface Company {
   /** letterhead images for offer / appointment letters (migration 1900) */
   letterhead_header_url?: string | null;
   letterhead_footer_url?: string | null;
+  /** authorised signatory for letters (migration 2200) */
+  signature_url?: string | null;
+  signatory_name?: string | null;
+  signatory_title?: string | null;
   primary_color: string;
   careers_enabled: boolean;
   careers_tagline: string | null;

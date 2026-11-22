@@ -24,7 +24,7 @@ const companySchema = z.object({
   employee_code_prefix: z.string().trim().regex(/^[A-Z0-9]{2,8}$/, '2–8 uppercase letters/numbers'), offer_approval_required: z.boolean(),
   offer_validity_days: reqNum(1, 90, 'Required'), work_start: z.string().min(4), work_end: z.string().min(4), late_grace_minutes: optNum(240).optional(), notice_period_days: optNum(180).optional(),
   pf_enabled: z.boolean(), pf_percent: reqNum(0, 50, 'Required'), professional_tax: reqNum(0, 100000, 'Required'), tds_percent: reqNum(0, 50, 'Required'),
-  email_from_name: optStr(80), email_reply_to: optEmail,
+  email_from_name: optStr(80), email_reply_to: optEmail, signatory_name: optStr(100).optional(), signatory_title: optStr(100).optional(),
 }).refine((v) => v.work_end > v.work_start, { message: 'End must be after start', path: ['work_end'] });
 type CompanyValues = z.infer<typeof companySchema>;
 
@@ -46,6 +46,8 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
     const data: Record<string, unknown> = { ...clean(v as Record<string, unknown>), working_days: days };
     // column added by migration 1300: never send it to a database that does not have it yet
     if (!company || !('late_grace_minutes' in company) || data.late_grace_minutes == null) delete data.late_grace_minutes;
+    // columns added by migration 2200
+    for (const k of ['signatory_name', 'signatory_title']) if (!company || !(k in company)) delete data[k];
     // column added by migration 2000
     if (!company || !('notice_period_days' in company) || data.notice_period_days == null) delete data.notice_period_days;
     await api.db.update('companies', companyId!, data);
@@ -70,6 +72,16 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
     await api.db.update('companies', companyId!, { [col]: await api.storage.publicUrl('company-assets', path) });
     await refresh();
   }, { success: 'Letterhead updated' });
+  // authorised signatory's signature for letters (migration 2200)
+  const signature = useAction(async (f: File | null) => {
+    if (!f) { await api.db.update('companies', companyId!, { signature_url: null }); await refresh(); return; }
+    if (!['image/png', 'image/jpeg'].includes(f.type)) throw new Error('Use a PNG (transparent background is best) or JPG image');
+    if (f.size > 512000) throw new Error('Signature image must be 500 KB or smaller');
+    const path = `${companyId}/signature-${Date.now()}.${f.type === 'image/png' ? 'png' : 'jpg'}`;
+    await api.storage.upload('company-assets', path, f, f.type);
+    await api.db.update('companies', companyId!, { signature_url: await api.storage.publicUrl('company-assets', path) });
+    await refresh();
+  }, { success: 'Signature updated' });
   if (!company) return <PageLoader />;
   const fields: Record<typeof section, FieldDef<CompanyValues>[]> = {
     profile: [
@@ -80,6 +92,8 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
       { name: 'timezone', label: 'Timezone', type: 'select', options: TIMEZONES.map((t) => ({ value: t, label: t })), required: true },
       { name: 'currency', label: 'Currency', type: 'select', options: CURRENCIES.map((c) => ({ value: c, label: c })), required: true },
       { name: 'email_from_name', label: 'Email sender name' }, { name: 'email_reply_to', label: 'Reply-to address', type: 'email' },
+      { name: 'signatory_name', label: 'Authorised signatory name', hidden: !('signatory_name' in company), hint: 'Printed under the signature on letters' },
+      { name: 'signatory_title', label: 'Signatory designation', hidden: !('signatory_title' in company), hint: 'e.g. Director' },
     ],
     careers: [
       { name: 'careers_enabled', label: 'Public careers page enabled', type: 'checkbox', span: 2, hint: `${window.location.origin}/careers/${company.slug}` },
@@ -134,6 +148,22 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
             })}
           </div>
           <p className="mt-3 text-xs text-slate-500">Wide PNG or JPG images (about 2000 px wide), max 1 MB each. They are drawn edge to edge on A4, so include your own margins and lines in the image.</p>
+          {'signature_url' in company && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <p className="label">Authorised signature (offer, appointment, relieving and experience letters)</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex h-16 w-44 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-2">
+                  {company.signature_url ? <img src={company.signature_url} alt="Signature" className="max-h-12 object-contain" /> : <span className="text-xs text-slate-400">No signature</span>}
+                </div>
+                <label className="btn-secondary btn-sm cursor-pointer"><ImageUp className="h-4 w-4" /> {company.signature_url ? 'Replace' : 'Upload'}
+                  <input type="file" className="sr-only" accept="image/png,image/jpeg" aria-label="Upload signature"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) signature.mutate(f); e.target.value = ''; }} />
+                </label>
+                {company.signature_url && <button type="button" className="btn-ghost btn-sm text-rose-600" onClick={() => signature.mutate(null)}>Remove</button>}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">A PNG with a transparent background looks best; at least 400 px wide prints sharply. Set the signatory name and designation above.</p>
+            </div>
+          )}
         </Card>
       )}
       <Card>
