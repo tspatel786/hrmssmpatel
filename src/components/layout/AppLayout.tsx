@@ -11,6 +11,7 @@ import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { config } from '@/lib/config';
 import { Logo } from '@/components/Logo';
+import { planLabel } from '@/lib/constants';
 import { fmtRelative } from '@/lib/format';
 import { useAction, useList } from '@/lib/hooks';
 import { useTheme, type ThemePref } from '@/lib/theme';
@@ -136,8 +137,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       {company && (
         <div className="border-t border-white/10 p-4 text-xs text-slate-400">
           <div className="flex items-center justify-between">
-            <span className="capitalize">{company.plan} plan</span>
-            <span className="capitalize">{company.status}</span>
+            <span>{planLabel(company.plan, company.status).plan}</span>
+            <span className={company.plan === 'lifetime' ? 'font-medium text-brand-400' : undefined}>{planLabel(company.plan, company.status).status}</span>
           </div>
         </div>
       )}

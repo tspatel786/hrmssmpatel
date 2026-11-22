@@ -48,7 +48,12 @@ export const SOURCES = opts(['careers', 'internal', 'referral', 'linkedin', 'age
 export const ATTENDANCE_STATUSES = opts(['present', 'absent', 'half_day', 'on_leave', 'holiday']);
 export const RECOMMENDATIONS = opts(['strong_hire', 'hire', 'no_hire', 'strong_no_hire']);
 export const DOC_TYPES = opts(['resume', 'cover_letter', 'id_proof', 'certificate', 'other']);
-export const PLANS = opts(['trial', 'starter', 'growth', 'enterprise']);
+export const PLANS = opts(['trial', 'starter', 'growth', 'enterprise', 'lifetime']);
+/** How a plan / status pair reads to users: a lifetime licence is permanent and never shows as a trial. */
+export function planLabel(plan: string, status: string): { plan: string; status: string } {
+  if (plan === 'lifetime') return { plan: 'Lifetime plan', status: status === 'suspended' ? 'Suspended' : 'Permanent' };
+  return { plan: `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`, status: status.charAt(0).toUpperCase() + status.slice(1) };
+}
 export const MONTHS: Option[] = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i, 1).toLocaleString('en', { month: 'long' }) }));
 
 export const RESUME_MIME = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];

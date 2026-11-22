@@ -9,7 +9,7 @@ import { Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, Field
 import { useCompany, useSession } from '@/contexts/session';
 import { api } from '@/lib/backend';
 import { appBaseUrl } from '@/lib/config';
-import { opts } from '@/lib/constants';
+import { opts, planLabel } from '@/lib/constants';
 import { fmtDate } from '@/lib/format';
 import { useAction, useList, useTable } from '@/lib/hooks';
 import { useRoles } from '@/lib/lookups';
@@ -181,7 +181,7 @@ function CompanySettings({ section }: { section: 'profile' | 'careers' | 'polici
         )}
         <div className="mt-6 flex justify-end"><Button type="submit" loading={save.isPending}>Save changes</Button></div>
       </Card>
-      <p className="text-xs text-slate-500">Plan: <strong className="capitalize">{company.plan}</strong> · Employee limit {company.max_employees} · Status <span className="capitalize">{company.status}</span>. Plan changes are handled by the platform administrator.</p>
+      <p className="text-xs text-slate-500">Plan: <strong>{planLabel(company.plan, company.status).plan}</strong> · Employee limit {company.max_employees} · Status {planLabel(company.plan, company.status).status}. Plan changes are handled by the platform administrator.</p>
     </form>
   );
 }
