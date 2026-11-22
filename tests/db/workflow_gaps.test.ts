@@ -165,4 +165,41 @@ describe('workflow hand-off gaps', () => {
     expect(next.allocated).toBe(quota.q + (el.carry_forward ? prev.allocated - 2 : 0));
     await expect(as('hr').rpc('allocate_year_balances', { p_company: ids.company, p_year: year + 1 })).rejects.toThrow();
   });
+
+  it('G9 time-based: expired offers, missed clock-out, stale leave, missing joining documents, unused login links', async () => {
+    const titles = async (u: string) => (await sql<{ title: string }>(pg, 'select title from notifications where user_id = $1', [u])).map((n) => n.title).join(' | ');
+    // missed clock-out yesterday (yesterday may be a weekend: the job only looks at the record)
+    await employee('late');
+    await sql(pg, "insert into attendance_records (company_id, employee_id, attendance_date, check_in, status, source) values ($1, $2, $3, now() - interval '30 hours', 'present', 'self') on conflict (employee_id, attendance_date) do update set check_in = excluded.check_in, check_out = null, status = 'present'",
+      [ids.company, ids.lateEmp, addDays(today, -1)]);
+    // leave pending for 2 days with the employee's manager
+    await sql(pg, 'update employees set manager_id = $2 where id = $1', [ids.lateEmp, ids.leadEmp]);
+    const [lt] = await sql<{ id: string }>(pg, "select id from leave_types where company_id = $1 and code = 'CL'", [ids.company]);
+    const lday = weekday(addDays(today, 10), 1);
+    const req = await as('late').rpc<string>('apply_leave', { p_company: ids.company, p_employee: ids.lateEmp, p_type: lt.id, p_start: lday, p_end: lday, p_half_day: false, p_reason: 'Family event' });
+    await sql(pg, "update leave_requests set created_at = now() - interval '2 days' where id = $1", [req]);
+    // unused login link that expired yesterday
+    const e = await as('hr').insert<{ id: string }>('employees', { company_id: ids.company, first_name: 'Never', last_name: 'Activated', email: 'never@gap.test', joining_date: addDays(today, -30) });
+    await as('hr').rpc('send_employee_login', { p_employee: e.id });
+    await sql(pg, "update employee_activations set expires_at = now() - interval '1 day' where employee_id = $1", [e.id]);
+
+    await sql(pg, 'delete from daily_job_runs');
+    await svc().rpc('run_daily_jobs');
+    expect(await titles(ids.late)).toMatch(/You did not clock out on/);
+    expect(await titles(ids.lead)).toMatch(/Reminder: leave request from late Test/);
+    expect(await titles(ids.hr)).toMatch(/Login link expired: Never Activated/);
+    // once per day only
+    await svc().rpc('run_daily_jobs');
+    const [{ n }] = await sql<{ n: number }>(pg, "select count(*)::int n from notifications where user_id = $1 and title like 'You did not clock out%'", [ids.late]);
+    expect(n).toBe(1);
+  });
+
+  it('G10 an offer past its expiry date is marked expired by the daily job', async () => {
+    const [o] = await sql<{ id: string }>(pg, "select id from offers where company_id = $1 limit 1", [ids.company]);
+    await pg.exec(`begin; select set_config('hrms.offer_rpc', 'on', true); update offers set status = 'sent', token_expires_at = now() - interval '1 hour' where id = '${o.id}'; commit;`);
+    await sql(pg, 'delete from daily_job_runs');
+    await svc().rpc('run_daily_jobs');
+    const [after] = await sql<{ status: string }>(pg, 'select status from offers where id = $1', [o.id]);
+    expect(after.status).toBe('expired');
+  });
 });
